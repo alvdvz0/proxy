@@ -2,419 +2,1155 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Прокси для Telegram</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>2048</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Arial', sans-serif;
+            background: var(--tg-theme-bg-color, #faf8ef);
+            color: var(--tg-theme-text-color, #776e65);
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
+            padding: 10px;
+            overflow: hidden;
+            touch-action: none;
         }
-        
+
         .container {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 24px;
-            padding: 40px;
-            max-width: 420px;
-            width: 100%;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             text-align: center;
+            width: 100%;
+            max-width: 380px;
         }
-        
-        .icon {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, #0088cc, #00a8e8);
-            border-radius: 20px;
-            margin: 0 auto 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 40px;
-            color: white;
-            box-shadow: 0 8px 24px rgba(0,136,204,0.3);
-        }
-        
+
         h1 {
-            color: #1a1a1a;
-            font-size: 24px;
+            color: var(--tg-theme-text-color, #776e65);
+            font-size: 32px;
             margin-bottom: 8px;
+            font-weight: bold;
         }
-        
-        .subtitle {
-            color: #666;
-            font-size: 14px;
-            margin-bottom: 32px;
-        }
-        
-        .status-block {
-            background: #f5f5f7;
-            border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 24px;
-            transition: all 0.3s ease;
-        }
-        
-        .status-block.checking {
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-        
-        .status-indicator {
-            display: inline-flex;
+
+        .header-row {
+            display: flex;
+            justify-content: center;
             align-items: center;
             gap: 8px;
-            font-weight: 600;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .score-container {
+            display: flex;
+            gap: 6px;
+        }
+
+        .score-box {
+            background: var(--tg-theme-secondary-bg-color, #bbada0);
+            padding: 6px 10px;
+            border-radius: 6px;
+            color: var(--tg-theme-button-text-color, white);
+            font-weight: bold;
+            min-width: 55px;
+        }
+
+        .score-label {
+            font-size: 9px;
+            text-transform: uppercase;
+            display: block;
+            margin-bottom: 1px;
+            opacity: 0.8;
+        }
+
+        .score-value {
             font-size: 16px;
-            margin-bottom: 8px;
         }
-        
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #ccc;
-            transition: all 0.3s;
+
+        .btn {
+            background: var(--tg-theme-button-color, #8f7a66);
+            color: var(--tg-theme-button-text-color, #f9f6f2);
+            border: none;
+            padding: 8px 12px;
+            font-size: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.1s, opacity 0.2s;
         }
-        
-        .status-dot.online {
-            background: #34c759;
-            box-shadow: 0 0 10px #34c759;
+
+        .btn:active {
+            transform: scale(0.95);
+            opacity: 0.8;
         }
-        
-        .status-dot.offline {
-            background: #ff3b30;
-            box-shadow: 0 0 10px #ff3b30;
+
+        .btn-icon {
+            font-size: 16px;
+            padding: 8px;
+            min-width: 36px;
         }
-        
-        .ping {
-            color: #666;
-            font-size: 13px;
-        }
-        
-        .proxy-info {
-            background: #1a1a1a;
-            color: #fff;
-            border-radius: 12px;
-            padding: 16px;
-            margin: 20px 0;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            text-align: left;
+
+        .game-wrapper {
+            width: 100%;
+            max-width: 360px;
+            margin: 0 auto;
             position: relative;
         }
-        
-        .proxy-info label {
-            color: #888;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            display: block;
-            margin-bottom: 4px;
-        }
-        
-        .proxy-row {
-            margin-bottom: 12px;
-        }
-        
-        .proxy-row:last-child {
-            margin-bottom: 0;
-        }
-        
-        .btn {
+
+        .game-container {
+            background: var(--tg-theme-secondary-bg-color, #bbada0);
+            padding: 6px;
+            border-radius: 6px;
+            position: relative;
+            touch-action: none;
             width: 100%;
-            padding: 16px 24px;
-            border: none;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            margin-bottom: 12px;
+            aspect-ratio: 1;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(4, 1fr);
+            gap: 6px;
+            width: 100%;
+            height: 100%;
+        }
+
+        .grid-cell {
+            background: rgba(238, 228, 218, 0.35);
+            border-radius: 4px;
+            width: 100%;
+            height: 100%;
+        }
+
+        [data-theme="dark"] .grid-cell {
+            background: rgba(66, 66, 114, 0.3);
+        }
+
+        .tile-container {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            right: 6px;
+            bottom: 6px;
+            pointer-events: none;
+        }
+
+        .tile {
+            position: absolute;
+            width: calc(25% - 4.5px);
+            height: calc(25% - 4.5px);
+            border-radius: 4px;
             display: flex;
+            justify-content: center;
             align-items: center;
+            font-size: 22px;
+            font-weight: bold;
+            z-index: 10;
+            opacity: 1;
+            transform: scale(1);
+            pointer-events: auto;
+            cursor: pointer;
+        }
+
+        .tile-new {
+            animation: tile-appear 0.15s ease-out;
+        }
+
+        @keyframes tile-appear {
+            0% { opacity: 0; transform: scale(0); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        .tile-merged {
+            animation: tile-pop 0.15s ease-in-out;
+            z-index: 20;
+        }
+
+        @keyframes tile-pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
+
+        .tile-2 { background: #eee4da; color: #776e65; }
+        .tile-4 { background: #ede0c8; color: #776e65; }
+        .tile-8 { background: #f2b179; color: #f9f6f2; }
+        .tile-16 { background: #f59563; color: #f9f6f2; }
+        .tile-32 { background: #f67c5f; color: #f9f6f2; }
+        .tile-64 { background: #f65e3b; color: #f9f6f2; }
+        .tile-128 { background: #edcf72; color: #f9f6f2; font-size: 18px; }
+        .tile-256 { background: #edcc61; color: #f9f6f2; font-size: 18px; }
+        .tile-512 { background: #edc850; color: #f9f6f2; font-size: 18px; }
+        .tile-1024 { background: #edc53f; color: #f9f6f2; font-size: 14px; }
+        .tile-2048 { background: #edc22e; color: #f9f6f2; font-size: 14px; }
+        .tile-super { background: #3c3a32; color: #f9f6f2; font-size: 12px; }
+
+        .controls {
+            margin-top: 12px;
+            display: flex;
             justify-content: center;
             gap: 8px;
         }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #0088cc, #00a8e8);
-            color: white;
-            box-shadow: 0 4px 16px rgba(0,136,204,0.3);
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0,136,204,0.4);
-        }
-        
-        .btn-primary:active {
-            transform: translateY(0);
-        }
-        
-        .btn-secondary {
-            background: #f5f5f7;
-            color: #1a1a1a;
-        }
-        
-        .btn-secondary:hover {
-            background: #e8e8ed;
-        }
-        
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none !important;
-        }
-        
-        .error-message {
-            background: #ffe5e5;
-            color: #d32f2f;
-            padding: 12px;
-            border-radius: 8px;
-            font-size: 14px;
-            margin-top: 16px;
-            display: none;
-        }
-        
-        .toast {
-            position: fixed;
-            bottom: 24px;
-            left: 50%;
-            transform: translateX(-50%) translateY(100px);
-            background: #1a1a1a;
-            color: white;
-            padding: 12px 24px;
-            border-radius: 50px;
-            font-size: 14px;
+
+        .message {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 6px;
             opacity: 0;
-            transition: all 0.3s ease;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+            z-index: 100;
+            padding: 15px;
+        }
+
+        .message.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .message h2 {
+            color: #776e65;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+
+        .message.won h2 { color: #edc22e; }
+        .message.lost h2 { color: #e94560; }
+
+        .message p {
+            color: #776e65;
+            margin-bottom: 15px;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .message-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .hint {
+            margin-top: 8px;
+            color: var(--tg-theme-hint-color, #776e65);
+            font-size: 11px;
+            opacity: 0.7;
+        }
+
+        /* Dark theme support */
+        [data-theme="dark"] body {
+            background: #1a1a2e;
+            color: #eee4da;
+        }
+
+        [data-theme="dark"] h1 {
+            color: #eee4da;
+        }
+
+        [data-theme="dark"] .game-container {
+            background: #16213e;
+        }
+
+        [data-theme="dark"] .grid-cell {
+            background: rgba(66, 66, 114, 0.3);
+        }
+
+        [data-theme="dark"] .message {
+            background: rgba(22, 33, 62, 0.98);
+        }
+
+        [data-theme="dark"] .message h2,
+        [data-theme="dark"] .message p,
+        [data-theme="dark"] .hint {
+            color: #eee4da;
+        }
+
+        /* Telegram theme adaptation */
+        [data-theme="dark"] .tile-2 { background: #3d3d3d; color: #e0e0e0; }
+        [data-theme="dark"] .tile-4 { background: #4d4d4d; color: #e0e0e0; }
+        [data-theme="dark"] .tile-8 { background: #6b4c2a; color: #f9f6f2; }
+        [data-theme="dark"] .tile-16 { background: #8b5a3c; color: #f9f6f2; }
+        [data-theme="dark"] .tile-32 { background: #a0522d; color: #f9f6f2; }
+        [data-theme="dark"] .tile-64 { background: #cd5c3c; color: #f9f6f2; }
+        [data-theme="dark"] .tile-128 { background: #d4a017; color: #f9f6f2; }
+        [data-theme="dark"] .tile-256 { background: #daa520; color: #f9f6f2; }
+        [data-theme="dark"] .tile-512 { background: #ffd700; color: #1a1a1a; }
+        [data-theme="dark"] .tile-1024 { background: #ffec8b; color: #1a1a1a; }
+        [data-theme="dark"] .tile-2048 { background: #fffacd; color: #1a1a1a; }
+
+        .undo-btn {
+            position: relative;
+        }
+
+        .undo-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .cheat-indicator {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(233, 69, 96, 0.9);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
             z-index: 1000;
         }
-        
-        .toast.show {
+
+        .cheat-indicator.show {
             opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
-        
-        .loader {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s ease-in-out infinite;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        .ip-info {
-            background: #e3f2fd;
-            border-left: 4px solid #2196f3;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 16px;
-            font-size: 13px;
-            color: #1565c0;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="icon">🚀</div>
-        <h1>MTProto Proxy</h1>
-        <p class="subtitle">Быстрый и безопасный доступ к Telegram</p>
+        <h1>2048</h1>
         
-        <div class="ip-info" id="ipInfo" style="display: none;">
-            🔍 Ваш IP записан для анализа
+        <div class="header-row">
+            <div class="score-container">
+                <div class="score-box">
+                    <span class="score-label">Счёт</span>
+                    <span class="score-value" id="score">0</span>
+                </div>
+                <div class="score-box">
+                    <span class="score-label">Лучший</span>
+                    <span class="score-value" id="best-score">0</span>
+                </div>
+            </div>
+            <button class="btn btn-icon undo-btn" id="undoBtn" title="Отменить ход">↩️</button>
+            <button class="btn btn-icon" id="themeBtn" title="Сменить тему">🌙</button>
         </div>
         
-        <div class="status-block checking" id="statusBlock">
-            <div class="status-indicator">
-                <span class="status-dot" id="statusDot"></span>
-                <span id="statusText">Проверка прокси...</span>
+        <div class="game-wrapper">
+            <div class="game-container" id="game-container">
+                <div class="grid-container" id="grid">
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                    <div class="grid-cell"></div>
+                </div>
+                <div class="tile-container" id="tile-container"></div>
+                <div class="message" id="message">
+                    <h2 id="message-title"></h2>
+                    <p id="message-text"></p>
+                    <div class="message-buttons" id="message-buttons"></div>
+                </div>
             </div>
-            <div class="ping" id="pingText">Измерение задержки</div>
         </div>
         
-        <div class="proxy-info">
-            <div class="proxy-row">
-                <label>Сервер</label>
-                <div id="serverAddress">{{ proxy_host }}</div>
-            </div>
-            <div class="proxy-row">
-                <label>Порт</label>
-                <div id="serverPort">{{ proxy_port }}</div>
-            </div>
-            <div class="proxy-row">
-                <label>Секрет</label>
-                <div id="serverSecret">{{ proxy_secret[:6] }}...{{ proxy_secret[-4:] if proxy_secret|length > 10 else '' }}</div>
-            </div>
+        <div class="controls">
+            <button class="btn" id="newGameBtn">Новая игра</button>
         </div>
         
-        <button class="btn btn-primary" id="connectBtn" disabled onclick="connectToTelegram()">
-            <span id="btnText">Подождите...</span>
-        </button>
-        
-        <button class="btn btn-secondary" onclick="copySettings()">
-            📋 Копировать настройки
-        </button>
-        
-        <div class="error-message" id="errorMessage"></div>
+        <div class="hint" id="hint-text">
+            Свайпы — ход, ↩️ — отмена
+        </div>
     </div>
-    
-    <div class="toast" id="toast">Скопировано в буфер обмена!</div>
+
+    <div class="cheat-indicator" id="cheatIndicator">Чит активирован!</div>
 
     <script>
-        const PROXY_CONFIG = {
-            host: "{{ proxy_host }}",
-            port: {{ proxy_port }},
-            secret: "{{ proxy_secret }}"
-        };
-        
-        let isProxyAvailable = false;
-        let pingMs = 0;
-        let checkCompleted = false;
-        
-        // Проверка доступности прокси с отправкой данных на сервер
-        async function checkProxyAndNotify() {
-            const startTime = performance.now();
-            const statusBlock = document.getElementById('statusBlock');
-            const statusDot = document.getElementById('statusDot');
-            const statusText = document.getElementById('statusText');
-            const pingText = document.getElementById('pingText');
-            const connectBtn = document.getElementById('connectBtn');
-            const btnText = document.getElementById('btnText');
-            const ipInfo = document.getElementById('ipInfo');
+        // Конфиг
+        const MOVE_DURATION = 80;
+        const SPAWN_DELAY = 30;
+
+        // Состояние
+        let grid = [];
+        let previousGrid = null;
+        let previousScore = 0;
+        let score = 0;
+        let bestScore = 0;
+        let hasWon = false;
+        let gameOver = false;
+        let tileIdCounter = 0;
+        let isProcessing = false;
+        let nextMove = null;
+        let canContinue = false;
+        let currentTheme = 'light';
+        let isTelegram = false;
+
+        // Свайп переменные
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchStartTime = 0;
+        let lastTapTime = 0;
+        let tapCount = 0;
+        let lastTappedTile = null;
+        let tapTimeout = null;
+
+        // Инициализация Telegram WebApp
+        function initTelegram() {
+            if (window.Telegram && window.Telegram.WebApp) {
+                isTelegram = true;
+                const tg = window.Telegram.WebApp;
+                
+                // Расширяем на полный экран
+                tg.expand();
+                tg.ready();
+                
+                // Применяем тему Telegram
+                if (tg.colorScheme === 'dark') {
+                    currentTheme = 'dark';
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                }
+                
+                // Обновляем подсказку для мобильных
+                document.getElementById('hint-text').textContent = 'Свайпы — ход, ↩️ — отмена, тройной тап на плитку — чит';
+                
+                // Настраиваем кнопку назад в Telegram
+                if (tg.BackButton) {
+                    tg.BackButton.onClick(undoMove);
+                }
+            } else {
+                document.getElementById('hint-text').textContent = 'Стрелки — ход, ↩️ или Ctrl+Z — отмена, Ctrl+2/4/8 — чит';
+            }
+        }
+
+        // Инициализация
+        function init() {
+            initTelegram();
             
-            let checkResult = {
-                available: false,
-                ping: 0,
-                error: null
+            try {
+                bestScore = parseInt(localStorage.getItem('bestScore2048')) || 0;
+            } catch(e) {
+                bestScore = 0;
+            }
+            
+            try {
+                currentTheme = localStorage.getItem('theme2048') || 'light';
+            } catch(e) {
+                currentTheme = 'light';
+            }
+            
+            if (currentTheme === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                document.getElementById('themeBtn').textContent = '☀️';
+            }
+            
+            updateScore();
+            initGame();
+            setupEventListeners();
+        }
+
+        function initGame() {
+            grid = Array(4).fill().map(function() { return Array(4).fill(null); });
+            score = 0;
+            hasWon = false;
+            gameOver = false;
+            canContinue = false;
+            tileIdCounter = 0;
+            isProcessing = false;
+            nextMove = null;
+            previousGrid = null;
+            updateScore();
+            updateUndoButton();
+            hideMessage();
+            
+            const container = document.getElementById('tile-container');
+            if (container) container.innerHTML = '';
+            
+            const tile1 = addRandomTile(true);
+            const tile2 = addRandomTile(true);
+            
+            if (tile1) createTileElement(tile1);
+            if (tile2) createTileElement(tile2);
+        }
+
+        function setupEventListeners() {
+            document.getElementById('themeBtn').onclick = toggleTheme;
+            document.getElementById('newGameBtn').onclick = initGame;
+            document.getElementById('undoBtn').onclick = undoMove;
+            
+            // Клавиатура для ПК
+            document.addEventListener('keydown', handleKeyDown, false);
+            
+            // Свайпы для мобильных
+            const gameContainer = document.getElementById('game-container');
+            gameContainer.addEventListener('touchstart', handleTouchStart, {passive: false});
+            gameContainer.addEventListener('touchend', handleTouchEnd, {passive: false});
+            gameContainer.addEventListener('touchmove', function(e) { e.preventDefault(); }, {passive: false});
+            
+            // Предотвращаем скролл страницы
+            document.body.addEventListener('touchmove', function(e) {
+                if (e.target.closest('.game-container')) {
+                    e.preventDefault();
+                }
+            }, {passive: false});
+        }
+
+        function toggleTheme() {
+            currentTheme = currentTheme === 'light' ? 'dark' : 'light';
+            if (currentTheme === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                document.getElementById('themeBtn').textContent = '☀️';
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+                document.getElementById('themeBtn').textContent = '🌙';
+            }
+            try {
+                localStorage.setItem('theme2048', currentTheme);
+            } catch(e) {}
+        }
+
+        function handleKeyDown(e) {
+            // Отмена хода - Backspace или Ctrl+Z
+            if (e.key === 'Backspace' || (e.ctrlKey && e.key === 'z')) {
+                e.preventDefault();
+                undoMove();
+                return;
+            }
+            
+            // Читы для ПК: Ctrl+2, Ctrl+4, Ctrl+8
+            if (e.ctrlKey && (e.key === '2' || e.key === '4' || e.key === '8')) {
+                e.preventDefault();
+                removeAllTiles(parseInt(e.key));
+                showCheatIndicator();
+                return;
+            }
+            
+            switch(e.key) {
+                case 'ArrowLeft': 
+                    e.preventDefault(); 
+                    processMove('left'); 
+                    break;
+                case 'ArrowRight': 
+                    e.preventDefault(); 
+                    processMove('right'); 
+                    break;
+                case 'ArrowUp': 
+                    e.preventDefault(); 
+                    processMove('up'); 
+                    break;
+                case 'ArrowDown': 
+                    e.preventDefault(); 
+                    processMove('down'); 
+                    break;
+            }
+        }
+
+        // Обработка свайпов
+        function handleTouchStart(e) {
+            if (isProcessing || (gameOver && !canContinue)) return;
+            
+            const touch = e.touches[0];
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            touchStartTime = Date.now();
+        }
+
+        function handleTouchEnd(e) {
+            if (!touchStartX || !touchStartY) return;
+            if (isProcessing || (gameOver && !canContinue)) return;
+            
+            const touch = e.changedTouches[0];
+            const diffX = touch.clientX - touchStartX;
+            const diffY = touch.clientY - touchStartY;
+            const diffTime = Date.now() - touchStartTime;
+            
+            touchStartX = 0;
+            touchStartY = 0;
+            
+            // Минимальное расстояние для свайпа
+            const minSwipeDistance = 30;
+            
+            if (Math.abs(diffX) > Math.abs(diffY)) {
+                if (Math.abs(diffX) > minSwipeDistance) {
+                    if (diffX > 0) {
+                        processMove('right');
+                    } else {
+                        processMove('left');
+                    }
+                }
+            } else {
+                if (Math.abs(diffY) > minSwipeDistance) {
+                    if (diffY > 0) {
+                        processMove('down');
+                    } else {
+                        processMove('up');
+                    }
+                }
+            }
+        }
+
+        // Обработка тройного тапа для читов на мобильных
+        function handleTileTap(tileData, element) {
+            const currentTime = Date.now();
+            
+            if (lastTappedTile === tileData.id && (currentTime - lastTapTime) < 400) {
+                tapCount++;
+            } else {
+                tapCount = 1;
+                lastTappedTile = tileData.id;
+            }
+            
+            lastTapTime = currentTime;
+            
+            if (tapCount === 3) {
+                // Тройной тап активирован - удаляем все плитки с таким значением
+                removeAllTiles(tileData.value);
+                showCheatIndicator();
+                tapCount = 0;
+                lastTappedTile = null;
+            }
+            
+            // Сброс счетчика через 500мс
+            clearTimeout(tapTimeout);
+            tapTimeout = setTimeout(function() {
+                tapCount = 0;
+                lastTappedTile = null;
+            }, 500);
+        }
+
+        function showCheatIndicator() {
+            const indicator = document.getElementById('cheatIndicator');
+            indicator.classList.add('show');
+            setTimeout(function() {
+                indicator.classList.remove('show');
+            }, 1500);
+        }
+
+        function addRandomTile(isNew) {
+            const emptyCells = [];
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    if (!grid[i][j]) emptyCells.push({i: i, j: j});
+                }
+            }
+            
+            if (emptyCells.length === 0) return null;
+            
+            const cell = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+            const value = Math.random() < 0.9 ? 2 : 4;
+            
+            const tile = {
+                value: value,
+                id: tileIdCounter++,
+                isNew: isNew,
+                merged: false,
+                x: cell.j,
+                y: cell.i
             };
             
-            try {
-                // Проверка доступности через WebSocket
-                await checkWebSocket();
-                
-                pingMs = Math.round(performance.now() - startTime);
-                checkResult = {
-                    available: true,
-                    ping: pingMs,
-                    error: null
-                };
-                
-                isProxyAvailable = true;
-                statusBlock.classList.remove('checking');
-                statusDot.classList.add('online');
-                statusText.textContent = 'Прокси доступен';
-                pingText.textContent = `Задержка: ${pingMs} мс`;
-                
-            } catch (error) {
-                checkResult = {
-                    available: false,
-                    ping: 0,
-                    error: error.message
-                };
-                
-                // Даже если проверка не удалась, показываем как "возможно доступен"
-                statusBlock.classList.remove('checking');
-                statusDot.classList.add('online');
-                statusText.textContent = 'Прокси готов к подключению';
-                pingText.textContent = 'Проверьте соединение';
-                isProxyAvailable = true;
+            grid[cell.i][cell.j] = tile;
+            return tile;
+        }
+
+        function createTileElement(tileData) {
+            const tile = document.createElement('div');
+            const className = tileData.value <= 2048 ? 'tile-' + tileData.value : 'tile-super';
+            tile.className = 'tile ' + className;
+            tile.textContent = tileData.value;
+            tile.id = 'tile-' + tileData.id;
+            
+            const gap = 6;
+            tile.style.left = 'calc(' + (tileData.x * 25) + '% + ' + (tileData.x * gap / 4) + 'px)';
+            tile.style.top = 'calc(' + (tileData.y * 25) + '% + ' + (tileData.y * gap / 4) + 'px)';
+            
+            if (tileData.isNew) {
+                tile.classList.add('tile-new');
+                tileData.isNew = false;
+            }
+            if (tileData.merged) {
+                tile.classList.add('tile-merged');
+                tileData.merged = false;
             }
             
-            // Отправляем результат на сервер (логирование IP)
-            try {
-                await fetch('/api/check-proxy', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(checkResult)
+            // Обработка тапов для читов на мобильных
+            tile.addEventListener('touchstart', function(e) {
+                handleTileTap(tileData, tile);
+            }, {passive: true});
+            
+            tile.addEventListener('click', function(e) {
+                handleTileTap(tileData, tile);
+            });
+            
+            const container = document.getElementById('tile-container');
+            if (container) container.appendChild(tile);
+        }
+
+        function updateTilePosition(id, x, y) {
+            const tile = document.getElementById('tile-' + id);
+            if (!tile) return;
+            
+            const gap = 6;
+            tile.style.transition = 'left ' + MOVE_DURATION + 'ms ease-out, top ' + MOVE_DURATION + 'ms ease-out';
+            tile.style.left = 'calc(' + (x * 25) + '% + ' + (x * gap / 4) + 'px)';
+            tile.style.top = 'calc(' + (y * 25) + '% + ' + (y * gap / 4) + 'px)';
+        }
+
+        function removeTile(id) {
+            const tile = document.getElementById('tile-' + id);
+            if (!tile) return;
+            
+            tile.style.opacity = '0';
+            setTimeout(function() {
+                if (tile.parentNode) tile.parentNode.removeChild(tile);
+            }, MOVE_DURATION);
+        }
+
+        function undoMove() {
+            if (!previousGrid || isProcessing) return;
+            
+            hideMessage();
+            gameOver = false;
+            
+            const container = document.getElementById('tile-container');
+            if (container) container.innerHTML = '';
+            
+            grid = previousGrid.map(function(row) {
+                return row.map(function(cell) {
+                    return cell ? {value: cell.value, id: cell.id, x: cell.x, y: cell.y, isNew: false, merged: false} : null;
                 });
-                ipInfo.style.display = 'block';
-                setTimeout(() => ipInfo.style.display = 'none', 3000);
-            } catch (e) {
-                console.error('Ошибка логирования:', e);
+            });
+            score = previousScore;
+            
+            hasWon = false;
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    if (grid[i][j] && grid[i][j].value === 2048) {
+                        hasWon = true;
+                        break;
+                    }
+                }
             }
             
-            checkCompleted = true;
-            connectBtn.disabled = false;
-            btnText.textContent = 'Подключить к Telegram';
+            updateScore();
+            updateUndoButton();
+            
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    if (grid[i][j]) {
+                        createTileElement(grid[i][j]);
+                    }
+                }
+            }
+            
+            previousGrid = null;
+            canContinue = false;
+            
+            // Вибрация для обратной связи
+            if (isTelegram && window.Telegram.WebApp.HapticFeedback) {
+                window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+            }
         }
-        
-        function checkWebSocket() {
-            return new Promise((resolve, reject) => {
-                const ws = new WebSocket(`wss://${PROXY_CONFIG.host}:${PROXY_CONFIG.port}`);
-                const timeout = setTimeout(() => {
-                    ws.close();
-                    reject(new Error('Timeout'));
-                }, 3000);
+
+        function updateUndoButton() {
+            const undoBtn = document.getElementById('undoBtn');
+            undoBtn.disabled = !previousGrid || isProcessing;
+        }
+
+        function calculateMove(direction) {
+            const newGrid = Array(4).fill().map(function() { return Array(4).fill(null); });
+            const animations = [];
+            let moved = false;
+            let scoreAdd = 0;
+            
+            const rowOrder = direction === 'down' ? [3, 2, 1, 0] : [0, 1, 2, 3];
+            const colOrder = direction === 'right' ? [3, 2, 1, 0] : [0, 1, 2, 3];
+            
+            for (let i = 0; i < 4; i++) {
+                const line = [];
                 
-                ws.onopen = () => {
-                    clearTimeout(timeout);
-                    ws.close();
-                    resolve(true);
-                };
+                for (let j = 0; j < 4; j++) {
+                    let actualRow, actualCol;
+                    
+                    if (direction === 'up' || direction === 'down') {
+                        actualRow = rowOrder[j];
+                        actualCol = i;
+                    } else {
+                        actualRow = i;
+                        actualCol = colOrder[j];
+                    }
+                    
+                    const cell = grid[actualRow][actualCol];
+                    if (cell) {
+                        line.push({
+                            value: cell.value,
+                            id: cell.id,
+                            x: cell.x,
+                            y: cell.y,
+                            fromRow: actualRow,
+                            fromCol: actualCol
+                        });
+                    }
+                }
                 
-                ws.onerror = () => {
-                    clearTimeout(timeout);
-                    resolve(true); // Оптимистично считаем доступным
-                };
+                const processed = [];
+                let k = 0;
+                while (k < line.length) {
+                    if (k < line.length - 1 && line[k].value === line[k + 1].value) {
+                        const newValue = line[k].value * 2;
+                        scoreAdd += newValue;
+                        
+                        processed.push({
+                            value: newValue,
+                            id: tileIdCounter++,
+                            fromId1: line[k].id,
+                            fromId2: line[k + 1].id,
+                            fromRow1: line[k].fromRow,
+                            fromCol1: line[k].fromCol,
+                            fromRow2: line[k + 1].fromRow,
+                            fromCol2: line[k + 1].fromCol,
+                            merged: true
+                        });
+                        k += 2;
+                    } else {
+                        processed.push({
+                            value: line[k].value,
+                            id: line[k].id,
+                            x: line[k].x,
+                            y: line[k].y,
+                            fromRow: line[k].fromRow,
+                            fromCol: line[k].fromCol,
+                            merged: false
+                        });
+                        k++;
+                    }
+                }
+                
+                for (let idx = 0; idx < processed.length; idx++) {
+                    const tile = processed[idx];
+                    const targetRow = direction === 'up' || direction === 'down' ? rowOrder[idx] : rowOrder[i];
+                    const targetCol = direction === 'left' || direction === 'right' ? colOrder[idx] : colOrder[i];
+                    
+                    const hasMoved = tile.fromRow !== targetRow || tile.fromCol !== targetCol;
+                    if (hasMoved) moved = true;
+                    
+                    if (tile.merged) {
+                        animations.push({
+                            type: 'merge',
+                            id1: tile.fromId1,
+                            id2: tile.fromId2,
+                            newId: tile.id,
+                            newValue: tile.value,
+                            x: targetCol,
+                            y: targetRow,
+                            targetRow: targetRow,
+                            targetCol: targetCol
+                        });
+                        
+                        newGrid[targetRow][targetCol] = {
+                            value: tile.value,
+                            id: tile.id,
+                            isNew: false,
+                            merged: true,
+                            x: targetCol,
+                            y: targetRow
+                        };
+                    } else {
+                        if (hasMoved) {
+                            animations.push({
+                                type: 'move',
+                                id: tile.id,
+                                x: targetCol,
+                                y: targetRow
+                            });
+                        }
+                        
+                        newGrid[targetRow][targetCol] = {
+                            value: tile.value,
+                            id: tile.id,
+                            isNew: false,
+                            merged: false,
+                            x: targetCol,
+                            y: targetRow
+                        };
+                    }
+                }
+            }
+            
+            return {moved: moved, newGrid: newGrid, animations: animations, scoreAdd: scoreAdd};
+        }
+
+        function processMove(direction) {
+            if (isProcessing) {
+                nextMove = direction;
+                return;
+            }
+            
+            if (gameOver && !canContinue) return;
+            
+            const gridBefore = grid.map(function(row) {
+                return row.map(function(cell) {
+                    return cell ? {value: cell.value, id: cell.id, x: cell.x, y: cell.y, isNew: false, merged: false} : null;
+                });
             });
-        }
-        
-        function connectToTelegram() {
-            const tgLink = `tg://proxy?server=${encodeURIComponent(PROXY_CONFIG.host)}&port=${PROXY_CONFIG.port}&secret=${encodeURIComponent(PROXY_CONFIG.secret)}`;
+            const scoreBefore = score;
             
-            window.location.href = tgLink;
+            const result = calculateMove(direction);
             
-            setTimeout(() => {
-                showToast('Если Telegram не открылся, скопируйте настройки');
-            }, 1000);
-        }
-        
-        function copySettings() {
-            const text = `Сервер: ${PROXY_CONFIG.host}\nПорт: ${PROXY_CONFIG.port}\nСекрет: ${PROXY_CONFIG.secret}`;
+            if (!result.moved) {
+                if (nextMove) {
+                    var next = nextMove;
+                    nextMove = null;
+                    setTimeout(function() { processMove(next); }, 0);
+                }
+                return;
+            }
             
-            navigator.clipboard.writeText(text).then(() => {
-                showToast('Настройки скопированы!');
-            }).catch(() => {
-                const textarea = document.createElement('textarea');
-                textarea.value = text;
-                document.body.appendChild(textarea);
-                textarea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textarea);
-                showToast('Настройки скопированы!');
-            });
+            previousGrid = gridBefore;
+            previousScore = scoreBefore;
+            updateUndoButton();
+            
+            isProcessing = true;
+            
+            if (nextMove) {
+                const container = document.getElementById('tile-container');
+                if (container) container.innerHTML = '';
+                renderGridState(grid);
+            }
+            
+            const animations = result.animations;
+            
+            for (let i = 0; i < animations.length; i++) {
+                const anim = animations[i];
+                if (anim.type === 'move') {
+                    updateTilePosition(anim.id, anim.x, anim.y);
+                } else if (anim.type === 'merge') {
+                    updateTilePosition(anim.id1, anim.x, anim.y);
+                    updateTilePosition(anim.id2, anim.x, anim.y);
+                }
+            }
+            
+            setTimeout(function() {
+                for (let i = 0; i < animations.length; i++) {
+                    const anim = animations[i];
+                    if (anim.type === 'merge') {
+                        removeTile(anim.id1);
+                        removeTile(anim.id2);
+                        
+                        const tile = {
+                            value: anim.newValue,
+                            id: anim.newId,
+                            isNew: false,
+                            merged: true,
+                            x: anim.targetCol,
+                            y: anim.targetRow
+                        };
+                        createTileElement(tile);
+                    }
+                }
+                
+                grid = result.newGrid;
+                score += result.scoreAdd;
+                updateScore();
+                
+                setTimeout(function() {
+                    const newTile = addRandomTile(true);
+                    if (newTile) createTileElement(newTile);
+                    
+                    checkWin();
+                    checkGameOver();
+                    
+                    isProcessing = false;
+                    updateUndoButton();
+                    
+                    if (nextMove) {
+                        var next = nextMove;
+                        nextMove = null;
+                        processMove(next);
+                    }
+                }, SPAWN_DELAY);
+            }, MOVE_DURATION);
+            
+            // Haptic feedback для Telegram
+            if (isTelegram && window.Telegram.WebApp.HapticFeedback) {
+                window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+            }
         }
-        
-        function showToast(message) {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 3000);
+
+        function renderGridState(state) {
+            const container = document.getElementById('tile-container');
+            if (container) container.innerHTML = '';
+            
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    if (state[i][j]) {
+                        createTileElement(state[i][j]);
+                    }
+                }
+            }
         }
-        
-        // Запускаем проверку при загрузке
-        window.addEventListener('load', checkProxyAndNotify);
+
+        function checkWin() {
+            if (hasWon && canContinue) return false;
+            
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    if (grid[i][j] && grid[i][j].value === 2048 && !hasWon) {
+                        hasWon = true;
+                        canContinue = true;
+                        setTimeout(function() {
+                            showWinMessage();
+                        }, 200);
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function checkGameOver() {
+            if (gameOver) return false;
+            
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    if (!grid[i][j]) return false;
+                }
+            }
+            
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    const val = grid[i][j].value;
+                    if (j < 3 && grid[i][j + 1] && grid[i][j + 1].value === val) return false;
+                    if (i < 3 && grid[i + 1][j] && grid[i + 1][j].value === val) return false;
+                }
+            }
+            
+            gameOver = true;
+            setTimeout(function() {
+                showMessage('lost', 'Игра окончена!', 'Нет доступных ходов.');
+            }, 200);
+            return true;
+        }
+
+        function showWinMessage() {
+            const msg = document.getElementById('message');
+            const title = document.getElementById('message-title');
+            const text = document.getElementById('message-text');
+            const buttons = document.getElementById('message-buttons');
+            
+            if (title) title.textContent = 'Победа!';
+            if (text) text.textContent = 'Вы достигли 2048! Продолжить или новая игра?';
+            if (buttons) {
+                buttons.innerHTML = '';
+                
+                const continueBtn = document.createElement('button');
+                continueBtn.textContent = 'Продолжить';
+                continueBtn.className = 'btn';
+                continueBtn.onclick = continueGame;
+                buttons.appendChild(continueBtn);
+                
+                const newGameBtn = document.createElement('button');
+                newGameBtn.textContent = 'Новая игра';
+                newGameBtn.className = 'btn';
+                newGameBtn.onclick = initGame;
+                buttons.appendChild(newGameBtn);
+            }
+            
+            if (msg) msg.className = 'message show won';
+        }
+
+        function showMessage(type, title, text) {
+            const msg = document.getElementById('message');
+            const msgTitle = document.getElementById('message-title');
+            const msgText = document.getElementById('message-text');
+            const buttons = document.getElementById('message-buttons');
+            
+            if (msgTitle) msgTitle.textContent = title;
+            if (msgText) msgText.textContent = text;
+            if (buttons) {
+                buttons.innerHTML = '';
+                const btn = document.createElement('button');
+                btn.textContent = 'Новая игра';
+                btn.className = 'btn';
+                btn.onclick = initGame;
+                buttons.appendChild(btn);
+            }
+            
+            if (msg) msg.className = 'message show ' + type;
+        }
+
+        function hideMessage() {
+            const msg = document.getElementById('message');
+            if (msg) msg.className = 'message';
+        }
+
+        function continueGame() {
+            hideMessage();
+            canContinue = true;
+        }
+
+        function updateScore() {
+            const scoreEl = document.getElementById('score');
+            const bestEl = document.getElementById('best-score');
+            
+            if (scoreEl) scoreEl.textContent = score;
+            if (score > bestScore) {
+                bestScore = score;
+                try {
+                    localStorage.setItem('bestScore2048', bestScore);
+                } catch(e) {}
+            }
+            if (bestEl) bestEl.textContent = bestScore;
+        }
+
+        function removeAllTiles(value) {
+            let removed = 0;
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    if (grid[i][j] && grid[i][j].value === value) {
+                        removeTile(grid[i][j].id);
+                        grid[i][j] = null;
+                        removed++;
+                    }
+                }
+            }
+            
+            if (removed > 0) {
+                // Добавляем новую плитку если удалили 2 или больше
+                setTimeout(function() {
+                    if (removed >= 2) {
+                        const newTile = addRandomTile(true);
+                        if (newTile) createTileElement(newTile);
+                    }
+                    checkGameOver();
+                }, 100);
+            }
+        }
+
+        // Запуск
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
     </script>
 </body>
 </html>

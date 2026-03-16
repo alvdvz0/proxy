@@ -335,6 +335,25 @@
         .cheat-indicator.show {
             opacity: 1;
         }
+
+        .error-indicator {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(244, 67, 54, 0.9);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .error-indicator.show {
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -393,6 +412,7 @@
 
     <div class="save-indicator" id="saveIndicator">Сохранено!</div>
     <div class="cheat-indicator" id="cheatIndicator">Чит активирован!</div>
+    <div class="error-indicator" id="errorIndicator">Ошибка!</div>
 
     <script>
         // Конфиг
@@ -426,6 +446,16 @@
         let lastTappedValue = null;
         let tapTimeout = null;
 
+        // Показать ошибку
+        function showError(message) {
+            const indicator = document.getElementById('errorIndicator');
+            indicator.textContent = message || 'Ошибка!';
+            indicator.classList.add('show');
+            setTimeout(function() {
+                indicator.classList.remove('show');
+            }, 2000);
+        }
+
         // Инициализация Telegram WebApp
         function initTelegram() {
             if (window.Telegram && window.Telegram.WebApp) {
@@ -435,6 +465,13 @@
                 // Расширяем на полный экран
                 tg.expand();
                 tg.ready();
+                
+                // Проверяем доступность CloudStorage
+                if (!tg.CloudStorage) {
+                    showError('CloudStorage не доступен');
+                    initGame(false);
+                    return;
+                }
                 
                 // Загружаем сохраненную игру из CloudStorage при запуске
                 loadGameFromCloud();
@@ -446,7 +483,10 @@
 
         // Сохранение игры в Telegram CloudStorage (только ручное)
         function saveGameToCloud() {
-            if (!isTelegram || !tg.CloudStorage) return;
+            if (!isTelegram || !tg.CloudStorage) {
+                showError('Сохранение недоступно');
+                return;
+            }
             
             const gameState = {
                 grid: serializeGrid(grid),
@@ -464,28 +504,52 @@
             
             const data = JSON.stringify(gameState);
             
-            tg.CloudStorage.setItem('2048_game_state', data, function(err, success) {
-                if (!err && success) {
+            // Проверяем размер данных (лимит 4096 символов)
+            if (data.length > 4096) {
+                showError('Слишком большие данные');
+                return;
+            }
+            
+            tg.CloudStorage.setItem('game_state', data, function(err, success) {
+                if (err) {
+                    console.error('CloudStorage save error:', err);
+                    showError('Ошибка сохранения: ' + err);
+                    return;
+                }
+                
+                if (success) {
                     showSaveIndicator();
+                } else {
+                    showError('Не удалось сохранить');
                 }
             });
         }
 
         // Загрузка игры из Telegram CloudStorage
         function loadGameFromCloud() {
-            if (!isTelegram || !tg.CloudStorage) return;
+            if (!isTelegram || !tg.CloudStorage) {
+                initGame(false);
+                return;
+            }
             
-            tg.CloudStorage.getItem('2048_game_state', function(err, value) {
-                if (!err && value) {
-                    try {
-                        const gameState = JSON.parse(value);
-                        restoreGameState(gameState);
-                    } catch(e) {
-                        console.error('Failed to parse saved game:', e);
-                        initGame(false);
-                    }
-                } else {
+            tg.CloudStorage.getItem('game_state', function(err, value) {
+                if (err) {
+                    console.error('CloudStorage load error:', err);
+                    initGame(false);
+                    return;
+                }
+                
+                if (!value || value === '') {
                     // Нет сохраненной игры - начинаем новую
+                    initGame(false);
+                    return;
+                }
+                
+                try {
+                    const gameState = JSON.parse(value);
+                    restoreGameState(gameState);
+                } catch(e) {
+                    console.error('Failed to parse saved game:', e);
                     initGame(false);
                 }
             });
@@ -653,8 +717,6 @@
             
             if (tile1) createTileElement(tile1);
             if (tile2) createTileElement(tile2);
-            
-            // Новая игра не сохраняется автоматически - только по кнопке
         }
 
         function setupEventListeners() {
@@ -746,7 +808,6 @@
             const touch = e.changedTouches[0];
             const diffX = touch.clientX - touchStartX;
             const diffY = touch.clientY - touchStartY;
-            const diffTime = Date.now() - touchStartTime;
             
             touchStartX = 0;
             touchStartY = 0;
@@ -1300,7 +1361,7 @@
                 bestScore = score;
                 // Сохраняем лучший счет отдельно для персистентности
                 if (isTelegram && tg.CloudStorage) {
-                    tg.CloudStorage.setItem('2048_best_score', bestScore.toString());
+                    tg.CloudStorage.setItem('best_score', bestScore.toString());
                 } else {
                     try {
                         localStorage.setItem('bestScore2048', bestScore);

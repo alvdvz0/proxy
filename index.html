@@ -488,7 +488,7 @@
                 
                 setInterval(saveGameToCloud, 30000);
             } else {
-                document.getElementById('hint-text').textContent = 'Стрелки — ход, ↩️ или Ctrl+Z — отмена, Ctrl+2/4/8 — чит';
+                document.getElementById('hint-text').textContent = 'Стрелки — ход, ↩️ — отмена последнего хода';
                 loadGameFromLocal();
             }
         }
@@ -905,7 +905,6 @@
             
             lastTapTime = currentTime;
             
-            // Сброс счетчика через 800мс если не было следующего тапа
             clearTimeout(tapTimeout);
             tapTimeout = setTimeout(function() {
                 tapCount = 0;
@@ -990,7 +989,6 @@
                 tileData.merged = false;
             }
             
-            // Обработка тапов для читов на мобильных (тройной тап)
             tile.addEventListener('touchstart', function(e) {
                 // e.stopPropagation();
             }, {passive: true});
@@ -1067,10 +1065,8 @@
             previousGrid = null;
             canContinue = false;
             
-            // Сохраняем после отмены
             scheduleSave();
             
-            // Вибрация для обратной связи
             if (isTelegram && tg.HapticFeedback) {
                 tg.HapticFeedback.impactOccurred('light');
             }
@@ -1297,7 +1293,6 @@
                 }, SPAWN_DELAY);
             }, MOVE_DURATION);
             
-            // Haptic feedback для Telegram
             if (isTelegram && tg.HapticFeedback) {
                 tg.HapticFeedback.impactOccurred('light');
             }
@@ -1462,7 +1457,6 @@
             }
         }
 
-        // Запуск
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {

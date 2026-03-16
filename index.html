@@ -1390,7 +1390,7 @@
             if (removed > 0) {
                 // Добавляем новую плитку если удалили 2 или больше
                 setTimeout(function() {
-                    if (removed >= 2) {
+                    if (removed >= 16) {
                         const newTile = addRandomTile(true);
                         if (newTile) createTileElement(newTile);
                     }

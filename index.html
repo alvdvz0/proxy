@@ -324,6 +324,46 @@
         .cheat-indicator.show {
             opacity: 1;
         }
+
+        .save-indicator {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(76, 175, 80, 0.9);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .save-indicator.show {
+            opacity: 1;
+        }
+
+        .tap-hint {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(233, 69, 96, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 50;
+            transition: opacity 0.2s;
+        }
+
+        .tap-hint.show {
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -366,6 +406,7 @@
                     <div class="grid-cell"></div>
                 </div>
                 <div class="tile-container" id="tile-container"></div>
+                <div class="tap-hint" id="tapHint">Ещё 2 тапа!</div>
                 <div class="message" id="message">
                     <h2 id="message-title"></h2>
                     <p id="message-text"></p>
@@ -384,13 +425,13 @@
     </div>
 
     <div class="cheat-indicator" id="cheatIndicator">Чит активирован!</div>
+    <div class="save-indicator" id="saveIndicator">Сохранено!</div>
 
     <script>
-        // Конфиг
         const MOVE_DURATION = 80;
         const SPAWN_DELAY = 30;
+        const SAVE_DELAY = 1000; 
 
-        // Состояние
         let grid = [];
         let previousGrid = null;
         let previousScore = 0;
@@ -404,71 +445,276 @@
         let canContinue = false;
         let currentTheme = 'light';
         let isTelegram = false;
+        let tg = null;
+        let saveTimeout = null;
 
-        // Свайп переменные
         let touchStartX = 0;
         let touchStartY = 0;
         let touchStartTime = 0;
+
         let lastTapTime = 0;
         let tapCount = 0;
-        let lastTappedTile = null;
+        let lastTappedValue = null;
         let tapTimeout = null;
+        let lastTappedElement = null;
 
-        // Инициализация Telegram WebApp
         function initTelegram() {
             if (window.Telegram && window.Telegram.WebApp) {
                 isTelegram = true;
-                const tg = window.Telegram.WebApp;
+                tg = window.Telegram.WebApp;
                 
-                // Расширяем на полный экран
                 tg.expand();
                 tg.ready();
                 
-                // Применяем тему Telegram
                 if (tg.colorScheme === 'dark') {
                     currentTheme = 'dark';
                     document.documentElement.setAttribute('data-theme', 'dark');
+                    document.getElementById('themeBtn').textContent = '☀️';
                 }
                 
-                // Обновляем подсказку для мобильных
-                document.getElementById('hint-text').textContent = 'Свайпы — ход, ↩️ — отмена, тройной тап на плитку — чит';
+                document.getElementById('hint-text').textContent = '2048';
                 
-                // Настраиваем кнопку назад в Telegram
-                if (tg.BackButton) {
-                    tg.BackButton.onClick(undoMove);
-                }
+                loadGameFromCloud();
+                
+                tg.onEvent('viewportChanged', function() {
+                    if (!tg.isExpanded) {
+                        saveGameToCloud();
+                    }
+                });
+                
+                window.addEventListener('beforeunload', function() {
+                    saveGameToCloud();
+                });
+                
+                setInterval(saveGameToCloud, 30000);
             } else {
                 document.getElementById('hint-text').textContent = 'Стрелки — ход, ↩️ или Ctrl+Z — отмена, Ctrl+2/4/8 — чит';
+                loadGameFromLocal();
             }
         }
 
-        // Инициализация
-        function init() {
-            initTelegram();
+        function saveGameToCloud() {
+            if (!isTelegram || !tg.CloudStorage) return;
+            
+            const gameState = {
+                grid: serializeGrid(grid),
+                previousGrid: previousGrid ? serializeGrid(previousGrid) : null,
+                previousScore: previousScore,
+                score: score,
+                bestScore: bestScore,
+                hasWon: hasWon,
+                gameOver: gameOver,
+                canContinue: canContinue,
+                tileIdCounter: tileIdCounter,
+                currentTheme: currentTheme,
+                savedAt: Date.now()
+            };
+            
+            const data = JSON.stringify(gameState);
+            
+            tg.CloudStorage.setItem('2048_game_state', data, function(err, success) {
+                if (!err && success) {
+                    showSaveIndicator();
+                }
+            });
+        }
+
+        function loadGameFromCloud() {
+            if (!isTelegram || !tg.CloudStorage) return;
+            
+            tg.CloudStorage.getItem('2048_game_state', function(err, value) {
+                if (!err && value) {
+                    try {
+                        const gameState = JSON.parse(value);
+                        restoreGameState(gameState);
+                    } catch(e) {
+                        console.error('Failed to parse saved game:', e);
+                        initGame(false);
+                    }
+                } else {
+                    initGame(false);
+                }
+            });
+        }
+
+        function saveGameToLocal() {
+            if (isTelegram) return;
+            
+            const gameState = {
+                grid: serializeGrid(grid),
+                previousGrid: previousGrid ? serializeGrid(previousGrid) : null,
+                previousScore: previousScore,
+                score: score,
+                bestScore: bestScore,
+                hasWon: hasWon,
+                gameOver: gameOver,
+                canContinue: canContinue,
+                tileIdCounter: tileIdCounter,
+                currentTheme: currentTheme,
+                savedAt: Date.now()
+            };
             
             try {
-                bestScore = parseInt(localStorage.getItem('bestScore2048')) || 0;
-            } catch(e) {
-                bestScore = 0;
-            }
+                localStorage.setItem('2048_game_state', JSON.stringify(gameState));
+                showSaveIndicator();
+            } catch(e) {}
+        }
+
+        function loadGameFromLocal() {
+            if (isTelegram) return;
             
             try {
-                currentTheme = localStorage.getItem('theme2048') || 'light';
-            } catch(e) {
-                currentTheme = 'light';
+                const saved = localStorage.getItem('2048_game_state');
+                if (saved) {
+                    const gameState = JSON.parse(saved);
+                    restoreGameState(gameState);
+                    return;
+                }
+            } catch(e) {}
+            
+            initGame(false);
+        }
+
+        function serializeGrid(gridData) {
+            const serialized = [];
+            for (let i = 0; i < 4; i++) {
+                const row = [];
+                for (let j = 0; j < 4; j++) {
+                    if (gridData[i][j]) {
+                        row.push({
+                            v: gridData[i][j].value,
+                            id: gridData[i][j].id,
+                            x: gridData[i][j].x,
+                            y: gridData[i][j].y
+                        });
+                    } else {
+                        row.push(null);
+                    }
+                }
+                serialized.push(row);
+            }
+            return serialized;
+        }
+
+        function deserializeGrid(serialized) {
+            const gridData = [];
+            let maxId = 0;
+            for (let i = 0; i < 4; i++) {
+                const row = [];
+                for (let j = 0; j < 4; j++) {
+                    if (serialized[i][j]) {
+                        const cell = serialized[i][j];
+                        row.push({
+                            value: cell.v,
+                            id: cell.id,
+                            x: cell.x,
+                            y: cell.y,
+                            isNew: false,
+                            merged: false
+                        });
+                        if (cell.id > maxId) maxId = cell.id;
+                    } else {
+                        row.push(null);
+                    }
+                }
+                gridData.push(row);
+            }
+            return { grid: gridData, maxId: maxId };
+        }
+
+        function restoreGameState(gameState) {
+            if (gameState.savedAt && (Date.now() - gameState.savedAt > 24 * 60 * 60 * 1000)) {
+                initGame(false);
+                return;
             }
             
-            if (currentTheme === 'dark') {
-                document.documentElement.setAttribute('data-theme', 'dark');
-                document.getElementById('themeBtn').textContent = '☀️';
+            if (gameState.grid) {
+                const restored = deserializeGrid(gameState.grid);
+                grid = restored.grid;
+                tileIdCounter = restored.maxId + 1;
+            } else {
+                initGame(false);
+                return;
+            }
+            
+            if (gameState.previousGrid) {
+                const restoredPrev = deserializeGrid(gameState.previousGrid);
+                previousGrid = restoredPrev.grid;
+            } else {
+                previousGrid = null;
+            }
+            
+            score = gameState.score || 0;
+            previousScore = gameState.previousScore || 0;
+            bestScore = gameState.bestScore || 0;
+            hasWon = gameState.hasWon || false;
+            gameOver = gameState.gameOver || false;
+            canContinue = gameState.canContinue || false;
+            
+            if (gameState.currentTheme) {
+                currentTheme = gameState.currentTheme;
+                if (currentTheme === 'dark') {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                    document.getElementById('themeBtn').textContent = '☀️';
+                }
             }
             
             updateScore();
-            initGame();
-            setupEventListeners();
+            updateUndoButton();
+            hideMessage();
+            
+            const container = document.getElementById('tile-container');
+            if (container) container.innerHTML = '';
+            
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    if (grid[i][j]) {
+                        createTileElement(grid[i][j]);
+                    }
+                }
+            }
+            
+            if (gameOver && !canContinue) {
+                setTimeout(function() {
+                    showMessage('lost', 'Игра окончена!', 'Нет доступных ходов.');
+                }, 500);
+            } else if (hasWon && !canContinue) {
+                setTimeout(function() {
+                    showWinMessage();
+                }, 500);
+            }
         }
 
-        function initGame() {
+        function init() {
+            initTelegram();
+            
+            if (!isTelegram) {
+                try {
+                    bestScore = parseInt(localStorage.getItem('bestScore2048')) || 0;
+                } catch(e) {
+                    bestScore = 0;
+                }
+                
+                try {
+                    currentTheme = localStorage.getItem('theme2048') || 'light';
+                } catch(e) {
+                    currentTheme = 'light';
+                }
+                
+                if (currentTheme === 'dark') {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                    document.getElementById('themeBtn').textContent = '☀️';
+                }
+                
+                updateScore();
+                setupEventListeners();
+                // Игра загрузится из localStorage или создастся новая
+            } else {
+                setupEventListeners();
+            }
+        }
+
+        function initGame(saveToCloud = true) {
             grid = Array(4).fill().map(function() { return Array(4).fill(null); });
             score = 0;
             hasWon = false;
@@ -490,28 +736,42 @@
             
             if (tile1) createTileElement(tile1);
             if (tile2) createTileElement(tile2);
+            
+            // Сохраняем начальное состояние
+            if (saveToCloud) {
+                scheduleSave();
+            }
         }
 
         function setupEventListeners() {
             document.getElementById('themeBtn').onclick = toggleTheme;
-            document.getElementById('newGameBtn').onclick = initGame;
+            document.getElementById('newGameBtn').onclick = function() {
+                initGame(true);
+            };
             document.getElementById('undoBtn').onclick = undoMove;
             
-            // Клавиатура для ПК
             document.addEventListener('keydown', handleKeyDown, false);
             
-            // Свайпы для мобильных
             const gameContainer = document.getElementById('game-container');
             gameContainer.addEventListener('touchstart', handleTouchStart, {passive: false});
             gameContainer.addEventListener('touchend', handleTouchEnd, {passive: false});
             gameContainer.addEventListener('touchmove', function(e) { e.preventDefault(); }, {passive: false});
             
-            // Предотвращаем скролл страницы
             document.body.addEventListener('touchmove', function(e) {
                 if (e.target.closest('.game-container')) {
                     e.preventDefault();
                 }
             }, {passive: false});
+            
+            document.addEventListener('visibilitychange', function() {
+                if (document.hidden) {
+                    if (isTelegram) {
+                        saveGameToCloud();
+                    } else {
+                        saveGameToLocal();
+                    }
+                }
+            });
         }
 
         function toggleTheme() {
@@ -523,20 +783,23 @@
                 document.documentElement.removeAttribute('data-theme');
                 document.getElementById('themeBtn').textContent = '🌙';
             }
-            try {
-                localStorage.setItem('theme2048', currentTheme);
-            } catch(e) {}
+            
+            if (isTelegram) {
+                scheduleSave();
+            } else {
+                try {
+                    localStorage.setItem('theme2048', currentTheme);
+                } catch(e) {}
+            }
         }
 
         function handleKeyDown(e) {
-            // Отмена хода - Backspace или Ctrl+Z
             if (e.key === 'Backspace' || (e.ctrlKey && e.key === 'z')) {
                 e.preventDefault();
                 undoMove();
                 return;
             }
             
-            // Читы для ПК: Ctrl+2, Ctrl+4, Ctrl+8
             if (e.ctrlKey && (e.key === '2' || e.key === '4' || e.key === '8')) {
                 e.preventDefault();
                 removeAllTiles(parseInt(e.key));
@@ -564,7 +827,6 @@
             }
         }
 
-        // Обработка свайпов
         function handleTouchStart(e) {
             if (isProcessing || (gameOver && !canContinue)) return;
             
@@ -586,7 +848,6 @@
             touchStartX = 0;
             touchStartY = 0;
             
-            // Минимальное расстояние для свайпа
             const minSwipeDistance = 30;
             
             if (Math.abs(diffX) > Math.abs(diffY)) {
@@ -608,33 +869,50 @@
             }
         }
 
-        // Обработка тройного тапа для читов на мобильных
         function handleTileTap(tileData, element) {
             const currentTime = Date.now();
+            const tapHint = document.getElementById('tapHint');
             
-            if (lastTappedTile === tileData.id && (currentTime - lastTapTime) < 400) {
-                tapCount++;
-            } else {
+            if (lastTappedValue !== tileData.value || (currentTime - lastTapTime) > 600) {
                 tapCount = 1;
-                lastTappedTile = tileData.id;
+                lastTappedValue = tileData.value;
+                lastTappedElement = element;
+                
+                tapHint.textContent = 'Ещё 2 тапа!';
+                tapHint.classList.add('show');
+                setTimeout(function() {
+                    tapHint.classList.remove('show');
+                }, 800);
+            } else {
+                tapCount++;
+                
+                if (tapCount === 2) {
+                    tapHint.textContent = 'Ещё 1 тап!';
+                    tapHint.classList.add('show');
+                    setTimeout(function() {
+                        tapHint.classList.remove('show');
+                    }, 800);
+                } else if (tapCount === 3) {
+                    tapHint.classList.remove('show');
+                    removeAllTiles(tileData.value);
+                    showCheatIndicator();
+                    tapCount = 0;
+                    lastTappedValue = null;
+                    lastTappedElement = null;
+                    return;
+                }
             }
             
             lastTapTime = currentTime;
             
-            if (tapCount === 3) {
-                // Тройной тап активирован - удаляем все плитки с таким значением
-                removeAllTiles(tileData.value);
-                showCheatIndicator();
-                tapCount = 0;
-                lastTappedTile = null;
-            }
-            
-            // Сброс счетчика через 500мс
+            // Сброс счетчика через 800мс если не было следующего тапа
             clearTimeout(tapTimeout);
             tapTimeout = setTimeout(function() {
                 tapCount = 0;
-                lastTappedTile = null;
-            }, 500);
+                lastTappedValue = null;
+                lastTappedElement = null;
+                tapHint.classList.remove('show');
+            }, 800);
         }
 
         function showCheatIndicator() {
@@ -643,6 +921,27 @@
             setTimeout(function() {
                 indicator.classList.remove('show');
             }, 1500);
+        }
+
+        function showSaveIndicator() {
+            const indicator = document.getElementById('saveIndicator');
+            indicator.classList.add('show');
+            setTimeout(function() {
+                indicator.classList.remove('show');
+            }, 1000);
+        }
+
+        // Планирование сохранения с дебаунсом
+        function scheduleSave() {
+            if (!isTelegram) {
+                saveGameToLocal();
+                return;
+            }
+            
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(function() {
+                saveGameToCloud();
+            }, SAVE_DELAY);
         }
 
         function addRandomTile(isNew) {
@@ -691,8 +990,12 @@
                 tileData.merged = false;
             }
             
-            // Обработка тапов для читов на мобильных
+            // Обработка тапов для читов на мобильных (тройной тап)
             tile.addEventListener('touchstart', function(e) {
+                // e.stopPropagation();
+            }, {passive: true});
+            
+            tile.addEventListener('touchend', function(e) {
                 handleTileTap(tileData, tile);
             }, {passive: true});
             
@@ -764,9 +1067,12 @@
             previousGrid = null;
             canContinue = false;
             
+            // Сохраняем после отмены
+            scheduleSave();
+            
             // Вибрация для обратной связи
-            if (isTelegram && window.Telegram.WebApp.HapticFeedback) {
-                window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+            if (isTelegram && tg.HapticFeedback) {
+                tg.HapticFeedback.impactOccurred('light');
             }
         }
 
@@ -981,6 +1287,8 @@
                     isProcessing = false;
                     updateUndoButton();
                     
+                    scheduleSave();
+                    
                     if (nextMove) {
                         var next = nextMove;
                         nextMove = null;
@@ -990,8 +1298,8 @@
             }, MOVE_DURATION);
             
             // Haptic feedback для Telegram
-            if (isTelegram && window.Telegram.WebApp.HapticFeedback) {
-                window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+            if (isTelegram && tg.HapticFeedback) {
+                tg.HapticFeedback.impactOccurred('light');
             }
         }
 
@@ -1070,7 +1378,9 @@
                 const newGameBtn = document.createElement('button');
                 newGameBtn.textContent = 'Новая игра';
                 newGameBtn.className = 'btn';
-                newGameBtn.onclick = initGame;
+                newGameBtn.onclick = function() {
+                    initGame(true);
+                };
                 buttons.appendChild(newGameBtn);
             }
             
@@ -1090,7 +1400,9 @@
                 const btn = document.createElement('button');
                 btn.textContent = 'Новая игра';
                 btn.className = 'btn';
-                btn.onclick = initGame;
+                btn.onclick = function() {
+                    initGame(true);
+                };
                 buttons.appendChild(btn);
             }
             
@@ -1105,6 +1417,7 @@
         function continueGame() {
             hideMessage();
             canContinue = true;
+            scheduleSave();
         }
 
         function updateScore() {
@@ -1114,9 +1427,13 @@
             if (scoreEl) scoreEl.textContent = score;
             if (score > bestScore) {
                 bestScore = score;
-                try {
-                    localStorage.setItem('bestScore2048', bestScore);
-                } catch(e) {}
+                if (isTelegram && tg.CloudStorage) {
+                    tg.CloudStorage.setItem('2048_best_score', bestScore.toString());
+                } else {
+                    try {
+                        localStorage.setItem('bestScore2048', bestScore);
+                    } catch(e) {}
+                }
             }
             if (bestEl) bestEl.textContent = bestScore;
         }
@@ -1134,13 +1451,13 @@
             }
             
             if (removed > 0) {
-                // Добавляем новую плитку если удалили 2 или больше
                 setTimeout(function() {
                     if (removed >= 2) {
                         const newTile = addRandomTile(true);
                         if (newTile) createTileElement(newTile);
                     }
                     checkGameOver();
+                    scheduleSave();
                 }, 100);
             }
         }

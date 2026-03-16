@@ -406,7 +406,6 @@
                     <div class="grid-cell"></div>
                 </div>
                 <div class="tile-container" id="tile-container"></div>
-                <div class="tap-hint" id="tapHint">Ещё 2 тапа!</div>
                 <div class="message" id="message">
                     <h2 id="message-title"></h2>
                     <p id="message-text"></p>
@@ -878,7 +877,6 @@
                 lastTappedValue = tileData.value;
                 lastTappedElement = element;
                 
-                tapHint.textContent = 'Ещё 2 тапа!';
                 tapHint.classList.add('show');
                 setTimeout(function() {
                     tapHint.classList.remove('show');

@@ -441,10 +441,7 @@
         let touchStartTime = 0;
 
         // Тройной тап переменные
-        let lastTapTime = 0;
-        let tapCount = 0;
-        let lastTappedValue = null;
-        let tapTimeout = null;
+        let tileTapCounts = {}; // Отслеживаем тапы по каждой плитке отдельно
 
         // Показать ошибку
         function showError(message) {
@@ -709,6 +706,9 @@
             updateUndoButton();
             hideMessage();
             
+            // Сбрасываем счетчики тапов
+            tileTapCounts = {};
+            
             const container = document.getElementById('tile-container');
             if (container) container.innerHTML = '';
             
@@ -836,34 +836,44 @@
 
         // Обработка тройного тапа для читов на мобильных - строго 3 тапа
         function handleTileTap(tileData, element) {
+            const tileId = tileData.id;
             const currentTime = Date.now();
             
-            // Если тапнули на другую плитку или прошло больше 500мс - сбрасываем счетчик
-            if (lastTappedValue !== tileData.value || (currentTime - lastTapTime) > 500) {
-                tapCount = 1;
-                lastTappedValue = tileData.value;
-            } else {
-                tapCount++;
+            // Получаем или создаем запись для этой плитки
+            if (!tileTapCounts[tileId]) {
+                tileTapCounts[tileId] = {
+                    count: 0,
+                    lastTime: 0
+                };
             }
             
-            lastTapTime = currentTime;
+            const tileInfo = tileTapCounts[tileId];
             
-            // Сброс счетчика через 500мс если не было следующего тапа
-            clearTimeout(tapTimeout);
-            tapTimeout = setTimeout(function() {
-                tapCount = 0;
-                lastTappedValue = null;
-            }, 500);
+            // Если прошло больше 600мс с последнего тапа - сбрасываем счетчик
+            if (currentTime - tileInfo.lastTime > 600) {
+                tileInfo.count = 1;
+            } else {
+                tileInfo.count++;
+            }
             
-            // Проверяем строго на 3 тапа
-            if (tapCount === 3) {
+            tileInfo.lastTime = currentTime;
+            
+            // Проверяем на 3 тапа
+            if (tileInfo.count === 3) {
                 // Тройной тап активирован!
                 removeAllTiles(tileData.value);
                 showCheatIndicator();
-                tapCount = 0;
-                lastTappedValue = null;
-                clearTimeout(tapTimeout);
+                // Сбрасываем счетчик
+                tileInfo.count = 0;
+                tileInfo.lastTime = 0;
             }
+            
+            // Очищаем старые записи (чтобы не засорять память)
+            setTimeout(function() {
+                if (tileTapCounts[tileId] && (Date.now() - tileTapCounts[tileId].lastTime > 1000)) {
+                    delete tileTapCounts[tileId];
+                }
+            }, 1000);
         }
 
         function showSaveIndicator() {
@@ -929,15 +939,9 @@
             }
             
             // Обработка тапов для читов на мобильных (тройной тап)
-            tile.addEventListener('touchstart', function(e) {
-                // Пустой обработчик для touchstart
-            }, {passive: true});
-            
-            tile.addEventListener('touchend', function(e) {
-                handleTileTap(tileData, tile);
-            }, {passive: true});
-            
+            // Используем click вместо touchend для более точного отслеживания
             tile.addEventListener('click', function(e) {
+                e.stopPropagation();
                 handleTileTap(tileData, tile);
             });
             
@@ -1298,7 +1302,7 @@
             const buttons = document.getElementById('message-buttons');
             
             if (title) title.textContent = 'Победа!';
-            if (text) text.textContent = 'Вы достигли 2048! Продолжить или новая игра?';
+            if (text) text.textContent = 'Вы достигли 2048! Продолжить или новоя игра?';
             if (buttons) {
                 buttons.innerHTML = '';
                 

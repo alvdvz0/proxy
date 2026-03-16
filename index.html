@@ -249,13 +249,6 @@
             justify-content: center;
         }
 
-        .hint {
-            margin-top: 8px;
-            color: var(--tg-theme-hint-color, #776e65);
-            font-size: 11px;
-            opacity: 0.7;
-        }
-
         /* Dark theme support */
         [data-theme="dark"] body {
             background: #1a1a2e;
@@ -279,8 +272,7 @@
         }
 
         [data-theme="dark"] .message h2,
-        [data-theme="dark"] .message p,
-        [data-theme="dark"] .hint {
+        [data-theme="dark"] .message p {
             color: #eee4da;
         }
 
@@ -397,10 +389,6 @@
         <div class="controls">
             <button class="btn" id="newGameBtn">Новая игра</button>
         </div>
-        
-        <div class="hint" id="hint-text">
-            Свайпы — ход, ↩️ — отмена
-        </div>
     </div>
 
     <div class="save-indicator" id="saveIndicator">Сохранено!</div>
@@ -448,20 +436,9 @@
                 tg.expand();
                 tg.ready();
                 
-                // Не применяем тему Telegram - используем светлую по умолчанию
-                
-                // Обновляем подсказку для мобильных
-                document.getElementById('hint-text').textContent = '2048';
-                
                 // Загружаем сохраненную игру из CloudStorage при запуске
                 loadGameFromCloud();
-                
-                // Сохраняем при закрытии (на всякий случай)
-                window.addEventListener('beforeunload', function() {
-                    // Не автосохраняем, только если пользователь явно сохранял
-                });
             } else {
-                document.getElementById('hint-text').textContent = '2048';
                 // Не в Telegram - новая игра
                 initGame(false);
             }
@@ -796,35 +773,36 @@
             }
         }
 
-        // Обработка тройного тапа для читов на мобильных (без визуальных подсказок)
+        // Обработка тройного тапа для читов на мобильных - строго 3 тапа
         function handleTileTap(tileData, element) {
             const currentTime = Date.now();
             
-            // Если тапнули на другую плитку или прошло больше 600мс - сбрасываем счетчик
-            if (lastTappedValue !== tileData.value || (currentTime - lastTapTime) > 600) {
+            // Если тапнули на другую плитку или прошло больше 500мс - сбрасываем счетчик
+            if (lastTappedValue !== tileData.value || (currentTime - lastTapTime) > 500) {
                 tapCount = 1;
                 lastTappedValue = tileData.value;
             } else {
                 tapCount++;
-                
-                if (tapCount === 3) {
-                    // Тройной тап активирован!
-                    removeAllTiles(tileData.value);
-                    showCheatIndicator();
-                    tapCount = 0;
-                    lastTappedValue = null;
-                    return;
-                }
             }
             
             lastTapTime = currentTime;
             
-            // Сброс счетчика через 800мс если не было следующего тапа
+            // Сброс счетчика через 500мс если не было следующего тапа
             clearTimeout(tapTimeout);
             tapTimeout = setTimeout(function() {
                 tapCount = 0;
                 lastTappedValue = null;
-            }, 800);
+            }, 500);
+            
+            // Проверяем строго на 3 тапа
+            if (tapCount === 3) {
+                // Тройной тап активирован!
+                removeAllTiles(tileData.value);
+                showCheatIndicator();
+                tapCount = 0;
+                lastTappedValue = null;
+                clearTimeout(tapTimeout);
+            }
         }
 
         function showSaveIndicator() {

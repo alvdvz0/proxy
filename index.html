@@ -462,8 +462,8 @@
         // Конфиг
         const MOVE_DURATION = 80;
         const SPAWN_DELAY = 30;
-        const MAX_SAVE_RETRIES = 3;
-        const SAVE_TIMEOUT = 5000;
+        const MAX_SAVE_RETRIES = 2;
+        const SAVE_TIMEOUT = 10000;
 
         // Состояние
         let grid = [];
@@ -481,6 +481,7 @@
         let isTelegram = false;
         let tg = null;
         let isSaving = false;
+        let currentSaveTimeout = null;
         let lastSaveTime = 0;
         const SAVE_COOLDOWN = 2000;
 
@@ -513,11 +514,22 @@
         }
 
         // Сброс состояния сохранения
-        function resetSaveState(saveBtn) {
+        function resetSaveState() {
             isSaving = false;
-            saveBtn.disabled = false;
-            saveBtn.classList.remove('btn-loading');
+            const saveBtn = document.getElementById('saveBtn');
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.classList.remove('btn-loading');
+            }
             hideLoading();
+        }
+
+        // Отмена текущего сохранения
+        function cancelCurrentSave() {
+            if (currentSaveTimeout) {
+                clearTimeout(currentSaveTimeout);
+                currentSaveTimeout = null;
+            }
         }
 
         // Инициализация Telegram WebApp
@@ -541,19 +553,20 @@
             }
         }
 
-        // Очистка старого сохранения и сохранение нового
+        // Простое и надёжное сохранение
         function saveGameToCloud(retryCount = 0) {
             if (!isTelegram || !tg.CloudStorage) {
                 showError('Сохранение недоступно');
                 return;
             }
-            
-            // Если уже сохраняем — отменяем предыдущее и начинаем новое
-            if (isSaving) {
-                console.log('Cancelling previous save, starting new one...');
-                // Принудительно сбрасываем состояние и начинаем заново
-                const saveBtn = document.getElementById('saveBtn');
-                resetSaveState(saveBtn);
+
+            // Если уже сохраняем - отменяем и пробуем позже
+            if (isSaving && retryCount === 0) {
+                console.log('Save in progress, will retry after...');
+                setTimeout(() => {
+                    saveGameToCloud(0);
+                }, 500);
+                return;
             }
             
             // Кулдаун между сохранениями
@@ -588,53 +601,50 @@
             
             if (data.length > 4096) {
                 showError('Слишком большие данные');
-                resetSaveState(saveBtn);
+                resetSaveState();
                 return;
             }
             
-            // Сначала удаляем старое сохранение, потом сохраняем новое
-            const performSave = () => {
-                let timeoutId = setTimeout(function() {
-                    console.error('Save timeout, attempt ' + (retryCount + 1));
-                    handleSaveError(saveBtn, retryCount, 'timeout');
-                }, SAVE_TIMEOUT);
-                
-                tg.CloudStorage.setItem('game_state', data, function(err, success) {
-                    clearTimeout(timeoutId);
-                    
-                    if (err) {
-                        console.error('CloudStorage save error:', err);
-                        handleSaveError(saveBtn, retryCount, err.message || 'unknown error');
-                        return;
-                    }
-                    
-                    resetSaveState(saveBtn);
-                    
-                    if (success) {
-                        showSaveIndicator();
-                    } else {
-                        handleSaveError(saveBtn, retryCount, 'failed');
-                    }
-                });
-            };
+            // Таймаут
+            currentSaveTimeout = setTimeout(function() {
+                currentSaveTimeout = null;
+                console.error('Save timeout, attempt ' + (retryCount + 1));
+                handleSaveError(retryCount, 'timeout');
+            }, SAVE_TIMEOUT);
             
-            // Удаляем старое сохранение перед записью нового
-            tg.CloudStorage.removeItem('game_state', function(err) {
-                // Игнорируем ошибку удаления (может и не быть старого сохранения)
-                performSave();
+            // Сохранение
+            tg.CloudStorage.setItem('game_state', data, function(err, success) {
+                // Очищаем таймаут
+                if (currentSaveTimeout) {
+                    clearTimeout(currentSaveTimeout);
+                    currentSaveTimeout = null;
+                }
+                
+                if (err) {
+                    console.error('CloudStorage save error:', err);
+                    handleSaveError(retryCount, err.message || 'unknown error');
+                    return;
+                }
+                
+                resetSaveState();
+                
+                if (success) {
+                    showSaveIndicator();
+                } else {
+                    handleSaveError(retryCount, 'failed');
+                }
             });
         }
 
-        // Обработка ошибок сохранения с повторными попытками
-        function handleSaveError(saveBtn, retryCount, errorMsg) {
+        // Обработка ошибок сохранения
+        function handleSaveError(retryCount, errorMsg) {
             if (retryCount < MAX_SAVE_RETRIES) {
                 console.log(`Retrying save (${retryCount + 1}/${MAX_SAVE_RETRIES})...`);
-                // Не сбрасываем состояние полностью, только делаем паузу и пробуем снова
                 setTimeout(() => {
                     saveGameToCloud(retryCount + 1);
-                }, 500 * (retryCount + 1));
+                }, 1000);
             } else {
-                resetSaveState(saveBtn);
+                resetSaveState();
                 showError('Ошибка сохранения: ' + (errorMsg || 'таймаут'));
             }
         }

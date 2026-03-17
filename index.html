@@ -517,29 +517,14 @@
                 // Расширяем на полный экран
                 tg.expand();
                 tg.ready();
-                
-                // Проверяем доступность CloudStorage
-                if (!tg.CloudStorage) {
-                    showError('CloudStorage не доступен');
-                    initGame(false);
-                    return;
-                }
-                
-                // Загружаем сохраненную игру из CloudStorage при запуске
-                loadGameFromCloud();
-            } else {
-                // Не в Telegram - новая игра
-                initGame(false);
-            }
-        }
-
-        // Сохранение игры в Telegram CloudStorage (только ручное)
-        function saveGameToCloud() {
-            if (!isTelegram || !tg.CloudStorage) {
-                showError('Сохранение недоступно');
-                return;
             }
             
+            // Загружаем сохраненную игру из localStorage при запуске
+            loadGameFromStorage();
+        }
+
+        // Сохранение игры в localStorage (только ручное)
+        function saveGameToStorage() {
             if (isSaving) {
                 return; // Уже сохраняем
             }
@@ -564,36 +549,12 @@
                 savedAt: Date.now()
             };
             
-            const data = JSON.stringify(gameState);
-            
-            // Проверяем размер данных (лимит 4096 символов)
-            if (data.length > 4096) {
-                showError('Слишком большие данные');
-                isSaving = false;
-                saveBtn.disabled = false;
-                saveBtn.classList.remove('btn-loading');
-                hideLoading();
-                return;
-            }
-            
-            // Устанавливаем таймаут на случай если callback не вызовется
-            const timeoutId = setTimeout(function() {
-                if (isSaving) {
-                    console.error('Save timeout - no response from CloudStorage');
-                    showError('Таймаут сохранения');
-                    isSaving = false;
-                    saveBtn.disabled = false;
-                    saveBtn.classList.remove('btn-loading');
-                    hideLoading();
-                }
-            }, 10000); // 10 секунд максимум
-            
-            tg.CloudStorage.setItem('game_state', data, function(err, success) {
-                clearTimeout(timeoutId);
+            try {
+                const data = JSON.stringify(gameState);
                 
-                if (err) {
-                    console.error('CloudStorage save error:', err);
-                    showError('Ошибка сохранения');
+                // Проверяем размер данных
+                if (data.length > 5000000) { // ~5MB лимит для localStorage
+                    showError('Слишком большие данные');
                     isSaving = false;
                     saveBtn.disabled = false;
                     saveBtn.classList.remove('btn-loading');
@@ -601,59 +562,53 @@
                     return;
                 }
                 
+                localStorage.setItem('game_state_2048', data);
+                localStorage.setItem('best_score_2048', bestScore.toString());
+                
                 isSaving = false;
                 saveBtn.disabled = false;
                 saveBtn.classList.remove('btn-loading');
                 hideLoading();
                 
-                if (success) {
-                    showSaveIndicator();
-                } else {
-                    showError('Не удалось сохранить');
-                }
-            });
+                showSaveIndicator();
+            } catch (err) {
+                console.error('localStorage save error:', err);
+                showError('Ошибка сохранения');
+                isSaving = false;
+                saveBtn.disabled = false;
+                saveBtn.classList.remove('btn-loading');
+                hideLoading();
+            }
         }
 
-        // Загрузка игры из Telegram CloudStorage
-        function loadGameFromCloud() {
-            if (!isTelegram || !tg.CloudStorage) {
-                initGame(false);
-                return;
-            }
-            
+        // Загрузка игры из localStorage
+        function loadGameFromStorage() {
             showLoading();
             
-            // Таймаут на загрузку
-            const timeoutId = setTimeout(function() {
-                console.error('Load timeout - no response from CloudStorage');
-                hideLoading();
-                initGame(false);
-            }, 10000);
-            
-            tg.CloudStorage.getItem('game_state', function(err, value) {
-                clearTimeout(timeoutId);
-                hideLoading();
-                
-                if (err) {
-                    console.error('CloudStorage load error:', err);
-                    initGame(false);
-                    return;
+            try {
+                // Загружаем лучший счет
+                const savedBestScore = localStorage.getItem('best_score_2048');
+                if (savedBestScore) {
+                    bestScore = parseInt(savedBestScore) || 0;
                 }
+                
+                const value = localStorage.getItem('game_state_2048');
                 
                 if (!value || value === '') {
                     // Нет сохраненной игры - начинаем новую
+                    hideLoading();
                     initGame(false);
                     return;
                 }
                 
-                try {
-                    const gameState = JSON.parse(value);
-                    restoreGameState(gameState);
-                } catch(e) {
-                    console.error('Failed to parse saved game:', e);
-                    initGame(false);
-                }
-            });
+                const gameState = JSON.parse(value);
+                restoreGameState(gameState);
+                hideLoading();
+            } catch (err) {
+                console.error('localStorage load error:', err);
+                hideLoading();
+                initGame(false);
+            }
         }
 
         // Сериализация сетки
@@ -728,7 +683,7 @@
             // Восстанавливаем остальные значения
             score = gameState.score || 0;
             previousScore = gameState.previousScore || 0;
-            bestScore = gameState.bestScore || 0;
+            bestScore = gameState.bestScore || bestScore;
             hasWon = gameState.hasWon || false;
             gameOver = gameState.gameOver || false;
             canContinue = gameState.canContinue || false;
@@ -780,23 +735,10 @@
             document.getElementById('themeBtn').textContent = '🌙';
             
             initTelegram();
-            
-            // Если не в Telegram, инициализируем здесь
-            if (!isTelegram) {
-                try {
-                    bestScore = parseInt(localStorage.getItem('bestScore2048')) || 0;
-                } catch(e) {
-                    bestScore = 0;
-                }
-                
-                updateScore();
-                setupEventListeners();
-            } else {
-                setupEventListeners();
-            }
+            setupEventListeners();
         }
 
-        function initGame(saveToCloud = true) {
+        function initGame(saveToStorage = true) {
             grid = Array(4).fill().map(function() { return Array(4).fill(null); });
             score = 0;
             hasWon = false;
@@ -829,7 +771,7 @@
                 initGame(false);
             };
             document.getElementById('undoBtn').onclick = undoMove;
-            document.getElementById('saveBtn').onclick = saveGameToCloud;
+            document.getElementById('saveBtn').onclick = saveGameToStorage;
             
             // Клавиатура для ПК
             document.addEventListener('keydown', handleKeyDown, false);
@@ -1466,14 +1408,10 @@
             if (scoreEl) scoreEl.textContent = score;
             if (score > bestScore) {
                 bestScore = score;
-                // Сохраняем лучший счет отдельно для персистентности
-                if (isTelegram && tg.CloudStorage) {
-                    tg.CloudStorage.setItem('best_score', bestScore.toString());
-                } else {
-                    try {
-                        localStorage.setItem('bestScore2048', bestScore);
-                    } catch(e) {}
-                }
+                // Сохраняем лучший счет в localStorage
+                try {
+                    localStorage.setItem('best_score_2048', bestScore.toString());
+                } catch(e) {}
             }
             if (bestEl) bestEl.textContent = bestScore;
         }

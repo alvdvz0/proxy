@@ -459,13 +459,11 @@
     <div class="loading-indicator" id="loadingIndicator">Сохранение...</div>
 
     <script>
-        // Конфиг
         const MOVE_DURATION = 80;
         const SPAWN_DELAY = 30;
         const MAX_SAVE_RETRIES = 3;
         const SAVE_TIMEOUT = 5000;
 
-        // Состояние
         let grid = [];
         let previousGrid = null;
         let previousScore = 0;
@@ -484,15 +482,12 @@
         let lastSaveTime = 0;
         const SAVE_COOLDOWN = 2000;
 
-        // Свайп переменные
         let touchStartX = 0;
         let touchStartY = 0;
         let touchStartTime = 0;
 
-        // Тройной тап переменные
         let tileTapCounts = {};
 
-        // Показать ошибку
         function showError(message) {
             const indicator = document.getElementById('errorIndicator');
             indicator.textContent = message || 'Ошибка!';
@@ -502,17 +497,14 @@
             }, 2000);
         }
 
-        // Показать загрузку
         function showLoading() {
             document.getElementById('loadingIndicator').classList.add('show');
         }
 
-        // Скрыть загрузку
         function hideLoading() {
             document.getElementById('loadingIndicator').classList.remove('show');
         }
 
-        // Сброс состояния сохранения
         function resetSaveState(saveBtn) {
             isSaving = false;
             saveBtn.disabled = false;
@@ -520,7 +512,6 @@
             hideLoading();
         }
 
-        // Инициализация Telegram WebApp
         function initTelegram() {
             if (window.Telegram && window.Telegram.WebApp) {
                 isTelegram = true;
@@ -541,22 +532,18 @@
             }
         }
 
-        // Очистка старого сохранения и сохранение нового
         function saveGameToCloud(retryCount = 0) {
             if (!isTelegram || !tg.CloudStorage) {
                 showError('Сохранение недоступно');
                 return;
             }
             
-            // Если уже сохраняем — отменяем предыдущее и начинаем новое
             if (isSaving) {
                 console.log('Cancelling previous save, starting new one...');
-                // Принудительно сбрасываем состояние и начинаем заново
                 const saveBtn = document.getElementById('saveBtn');
                 resetSaveState(saveBtn);
             }
             
-            // Кулдаун между сохранениями
             const now = Date.now();
             if (now - lastSaveTime < SAVE_COOLDOWN && retryCount === 0) {
                 showError('Подождите перед повторным сохранением');
@@ -592,7 +579,6 @@
                 return;
             }
             
-            // Сначала удаляем старое сохранение, потом сохраняем новое
             const performSave = () => {
                 let timeoutId = setTimeout(function() {
                     console.error('Save timeout, attempt ' + (retryCount + 1));
@@ -618,18 +604,14 @@
                 });
             };
             
-            // Удаляем старое сохранение перед записью нового
             tg.CloudStorage.removeItem('game_state', function(err) {
-                // Игнорируем ошибку удаления (может и не быть старого сохранения)
                 performSave();
             });
         }
 
-        // Обработка ошибок сохранения с повторными попытками
         function handleSaveError(saveBtn, retryCount, errorMsg) {
             if (retryCount < MAX_SAVE_RETRIES) {
                 console.log(`Retrying save (${retryCount + 1}/${MAX_SAVE_RETRIES})...`);
-                // Не сбрасываем состояние полностью, только делаем паузу и пробуем снова
                 setTimeout(() => {
                     saveGameToCloud(retryCount + 1);
                 }, 500 * (retryCount + 1));
@@ -639,7 +621,6 @@
             }
         }
 
-        // Загрузка игры из Telegram CloudStorage
         function loadGameFromCloud() {
             if (!isTelegram || !tg.CloudStorage) {
                 initGame(false);
@@ -684,7 +665,6 @@
             });
         }
 
-        // Сериализация сетки
         function serializeGrid(gridData) {
             const serialized = [];
             for (let i = 0; i < 4; i++) {
@@ -706,7 +686,6 @@
             return serialized;
         }
 
-        // Десериализация сетки
         function deserializeGrid(serialized) {
             const gridData = [];
             let maxId = 0;
@@ -733,7 +712,6 @@
             return { grid: gridData, maxId: maxId };
         }
 
-        // Восстановление состояния игры
         function restoreGameState(gameState) {
             if (gameState.grid) {
                 const restored = deserializeGrid(gameState.grid);
@@ -794,7 +772,6 @@
             }
         }
 
-        // Инициализация
         function init() {
             currentTheme = 'light';
             document.documentElement.removeAttribute('data-theme');
@@ -1504,7 +1481,6 @@
             }
         }
 
-        // Запуск
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {

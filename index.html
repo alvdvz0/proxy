@@ -462,8 +462,6 @@
         // Конфиг
         const MOVE_DURATION = 80;
         const SPAWN_DELAY = 30;
-        const MAX_SAVE_RETRIES = 2;
-        const SAVE_TIMEOUT = 10000;
 
         // Состояние
         let grid = [];
@@ -481,9 +479,6 @@
         let isTelegram = false;
         let tg = null;
         let isSaving = false;
-        let currentSaveTimeout = null;
-        let lastSaveTime = 0;
-        const SAVE_COOLDOWN = 2000;
 
         // Свайп переменные
         let touchStartX = 0;
@@ -513,128 +508,110 @@
             document.getElementById('loadingIndicator').classList.remove('show');
         }
 
-        // Сброс состояния сохранения
-        function resetSaveState() {
-            isSaving = false;
-            const saveBtn = document.getElementById('saveBtn');
-            if (saveBtn) {
-                saveBtn.disabled = false;
-                saveBtn.classList.remove('btn-loading');
-            }
-            hideLoading();
-        }
-
         // Инициализация Telegram WebApp
         function initTelegram() {
             if (window.Telegram && window.Telegram.WebApp) {
                 isTelegram = true;
                 tg = window.Telegram.WebApp;
                 
+                // Расширяем на полный экран
                 tg.expand();
                 tg.ready();
                 
+                // Проверяем доступность CloudStorage
                 if (!tg.CloudStorage) {
                     showError('CloudStorage не доступен');
                     initGame(false);
                     return;
                 }
                 
+                // Загружаем сохраненную игру из CloudStorage при запуске
                 loadGameFromCloud();
             } else {
+                // Не в Telegram - новая игра
                 initGame(false);
             }
         }
 
-        // Упрощённое сохранение - только сетка и счета
-        function saveGameToCloud(retryCount = 0) {
+        // Сохранение игры в Telegram CloudStorage (только ручное)
+        function saveGameToCloud() {
             if (!isTelegram || !tg.CloudStorage) {
                 showError('Сохранение недоступно');
                 return;
             }
-
-            // Если уже сохраняем - подождём
-            if (isSaving && retryCount === 0) {
-                console.log('Save in progress, waiting...');
-                setTimeout(() => {
-                    saveGameToCloud(0);
-                }, 500);
-                return;
-            }
             
-            // Кулдаун между сохранениями
-            const now = Date.now();
-            if (now - lastSaveTime < SAVE_COOLDOWN && retryCount === 0) {
-                showError('Подождите перед повторным сохранением');
-                return;
+            if (isSaving) {
+                return; // Уже сохраняем
             }
             
             isSaving = true;
-            lastSaveTime = now;
             const saveBtn = document.getElementById('saveBtn');
             saveBtn.disabled = true;
             saveBtn.classList.add('btn-loading');
             showLoading();
             
-            // Только нужные данные: сетка (только значения), счет, лучший счет
-            const simpleGrid = [];
-            for (let i = 0; i < 4; i++) {
-                const row = [];
-                for (let j = 0; j < 4; j++) {
-                    row.push(grid[i][j] ? grid[i][j].value : 0);
-                }
-                simpleGrid.push(row);
-            }
-            
-            const saveData = {
-                g: simpleGrid,      // grid - только числа
-                s: score,           // score
-                b: bestScore        // best score
+            const gameState = {
+                grid: serializeGrid(grid),
+                previousGrid: previousGrid ? serializeGrid(previousGrid) : null,
+                previousScore: previousScore,
+                score: score,
+                bestScore: bestScore,
+                hasWon: hasWon,
+                gameOver: gameOver,
+                canContinue: canContinue,
+                tileIdCounter: tileIdCounter,
+                currentTheme: currentTheme,
+                savedAt: Date.now()
             };
             
-            const data = JSON.stringify(saveData);
+            const data = JSON.stringify(gameState);
             
-            // Таймаут
-            currentSaveTimeout = setTimeout(function() {
-                currentSaveTimeout = null;
-                console.error('Save timeout, attempt ' + (retryCount + 1));
-                handleSaveError(retryCount, 'timeout');
-            }, SAVE_TIMEOUT);
+            // Проверяем размер данных (лимит 4096 символов)
+            if (data.length > 4096) {
+                showError('Слишком большие данные');
+                isSaving = false;
+                saveBtn.disabled = false;
+                saveBtn.classList.remove('btn-loading');
+                hideLoading();
+                return;
+            }
             
-            // Сохранение
-            tg.CloudStorage.setItem('game2048', data, function(err, success) {
-                // Очищаем таймаут
-                if (currentSaveTimeout) {
-                    clearTimeout(currentSaveTimeout);
-                    currentSaveTimeout = null;
+            // Устанавливаем таймаут на случай если callback не вызовется
+            const timeoutId = setTimeout(function() {
+                if (isSaving) {
+                    console.error('Save timeout - no response from CloudStorage');
+                    showError('Таймаут сохранения');
+                    isSaving = false;
+                    saveBtn.disabled = false;
+                    saveBtn.classList.remove('btn-loading');
+                    hideLoading();
                 }
+            }, 10000); // 10 секунд максимум
+            
+            tg.CloudStorage.setItem('game_state', data, function(err, success) {
+                clearTimeout(timeoutId);
                 
                 if (err) {
                     console.error('CloudStorage save error:', err);
-                    handleSaveError(retryCount, err.message || 'unknown error');
+                    showError('Ошибка сохранения');
+                    isSaving = false;
+                    saveBtn.disabled = false;
+                    saveBtn.classList.remove('btn-loading');
+                    hideLoading();
                     return;
                 }
                 
-                resetSaveState();
+                isSaving = false;
+                saveBtn.disabled = false;
+                saveBtn.classList.remove('btn-loading');
+                hideLoading();
                 
                 if (success) {
                     showSaveIndicator();
                 } else {
-                    handleSaveError(retryCount, 'failed');
+                    showError('Не удалось сохранить');
                 }
             });
-        }
-
-        // Обработка ошибок сохранения
-        function handleSaveError(retryCount, errorMsg) {
-            if (retryCount < MAX_SAVE_RETRIES) {
-                console.log(`Retrying save (${retryCount + 1}/${MAX_SAVE_RETRIES})...`);
-                setTimeout(() => {
-                    saveGameToCloud(retryCount + 1);
-                }, 1000);
-            } else {
-                resetSaveState();
-                showError('Ошибка сохранения: ' + (errorMsg || 'таймаут'));
-            }
         }
 
         // Загрузка игры из Telegram CloudStorage
@@ -646,35 +623,32 @@
             
             showLoading();
             
-            let timeoutId = setTimeout(function() {
-                console.error('Load timeout');
+            // Таймаут на загрузку
+            const timeoutId = setTimeout(function() {
+                console.error('Load timeout - no response from CloudStorage');
                 hideLoading();
                 initGame(false);
-            }, SAVE_TIMEOUT);
+            }, 10000);
             
-            tg.CloudStorage.getItem('game2048', function(err, value) {
+            tg.CloudStorage.getItem('game_state', function(err, value) {
                 clearTimeout(timeoutId);
                 hideLoading();
                 
                 if (err) {
                     console.error('CloudStorage load error:', err);
-                    if (!window.loadRetried) {
-                        window.loadRetried = true;
-                        setTimeout(loadGameFromCloud, 1000);
-                        return;
-                    }
                     initGame(false);
                     return;
                 }
                 
                 if (!value || value === '') {
+                    // Нет сохраненной игры - начинаем новую
                     initGame(false);
                     return;
                 }
                 
                 try {
-                    const saveData = JSON.parse(value);
-                    restoreGameState(saveData);
+                    const gameState = JSON.parse(value);
+                    restoreGameState(gameState);
                 } catch(e) {
                     console.error('Failed to parse saved game:', e);
                     initGame(false);
@@ -682,60 +656,99 @@
             });
         }
 
-        // Восстановление состояния игры из упрощенных данных
-        function restoreGameState(saveData) {
-            // Восстанавливаем сетку
-            if (saveData.g && Array.isArray(saveData.g)) {
-                grid = [];
-                tileIdCounter = 0;
-                for (let i = 0; i < 4; i++) {
-                    const row = [];
-                    for (let j = 0; j < 4; j++) {
-                        const val = saveData.g[i] && saveData.g[i][j] ? saveData.g[i][j] : 0;
-                        if (val > 0) {
-                            row.push({
-                                value: val,
-                                id: tileIdCounter++,
-                                x: j,
-                                y: i,
-                                isNew: false,
-                                merged: false
-                            });
-                        } else {
-                            row.push(null);
-                        }
+        // Сериализация сетки
+        function serializeGrid(gridData) {
+            const serialized = [];
+            for (let i = 0; i < 4; i++) {
+                const row = [];
+                for (let j = 0; j < 4; j++) {
+                    if (gridData[i][j]) {
+                        row.push({
+                            v: gridData[i][j].value,
+                            id: gridData[i][j].id,
+                            x: gridData[i][j].x,
+                            y: gridData[i][j].y
+                        });
+                    } else {
+                        row.push(null);
                     }
-                    grid.push(row);
                 }
+                serialized.push(row);
+            }
+            return serialized;
+        }
+
+        // Десериализация сетки
+        function deserializeGrid(serialized) {
+            const gridData = [];
+            let maxId = 0;
+            for (let i = 0; i < 4; i++) {
+                const row = [];
+                for (let j = 0; j < 4; j++) {
+                    if (serialized[i][j]) {
+                        const cell = serialized[i][j];
+                        row.push({
+                            value: cell.v,
+                            id: cell.id,
+                            x: cell.x,
+                            y: cell.y,
+                            isNew: false,
+                            merged: false
+                        });
+                        if (cell.id > maxId) maxId = cell.id;
+                    } else {
+                        row.push(null);
+                    }
+                }
+                gridData.push(row);
+            }
+            return { grid: gridData, maxId: maxId };
+        }
+
+        // Восстановление состояния игры
+        function restoreGameState(gameState) {
+            // Восстанавливаем сетку
+            if (gameState.grid) {
+                const restored = deserializeGrid(gameState.grid);
+                grid = restored.grid;
+                tileIdCounter = restored.maxId + 1;
             } else {
                 initGame(false);
                 return;
             }
             
-            // Восстанавливаем счета
-            score = saveData.s || 0;
-            bestScore = saveData.b || 0;
-            
-            // Проверяем победу
-            hasWon = false;
-            for (let i = 0; i < 4; i++) {
-                for (let j = 0; j < 4; j++) {
-                    if (grid[i][j] && grid[i][j].value === 2048) {
-                        hasWon = true;
-                        break;
-                    }
-                }
+            // Восстанавливаем предыдущую сетку для отмены
+            if (gameState.previousGrid) {
+                const restoredPrev = deserializeGrid(gameState.previousGrid);
+                previousGrid = restoredPrev.grid;
+            } else {
+                previousGrid = null;
             }
             
-            gameOver = false;
-            canContinue = false;
-            previousGrid = null;
+            // Восстанавливаем остальные значения
+            score = gameState.score || 0;
+            previousScore = gameState.previousScore || 0;
+            bestScore = gameState.bestScore || 0;
+            hasWon = gameState.hasWon || false;
+            gameOver = gameState.gameOver || false;
+            canContinue = gameState.canContinue || false;
             
+            // Восстанавливаем тему (по умолчанию светлая, но если сохранена темная - используем её)
+            if (gameState.currentTheme === 'dark') {
+                currentTheme = 'dark';
+                document.documentElement.setAttribute('data-theme', 'dark');
+                document.getElementById('themeBtn').textContent = '☀️';
+            } else {
+                currentTheme = 'light';
+                document.documentElement.removeAttribute('data-theme');
+                document.getElementById('themeBtn').textContent = '🌙';
+            }
+            
+            // Отрисовываем игру
             updateScore();
             updateUndoButton();
             hideMessage();
             
-            // Отрисовываем
             const container = document.getElementById('tile-container');
             if (container) container.innerHTML = '';
             
@@ -747,18 +760,28 @@
                 }
             }
             
-            // Проверяем конец игры
-            checkGameOver();
+            // Если игра окончена, показываем сообщение
+            if (gameOver && !canContinue) {
+                setTimeout(function() {
+                    showMessage('lost', 'Игра окончена!', 'Нет доступных ходов.');
+                }, 500);
+            } else if (hasWon && !canContinue) {
+                setTimeout(function() {
+                    showWinMessage();
+                }, 500);
+            }
         }
 
         // Инициализация
         function init() {
+            // Устанавливаем светлую тему по умолчанию
             currentTheme = 'light';
             document.documentElement.removeAttribute('data-theme');
             document.getElementById('themeBtn').textContent = '🌙';
             
             initTelegram();
             
+            // Если не в Telegram, инициализируем здесь
             if (!isTelegram) {
                 try {
                     bestScore = parseInt(localStorage.getItem('bestScore2048')) || 0;
@@ -787,6 +810,7 @@
             updateUndoButton();
             hideMessage();
             
+            // Сбрасываем счетчики тапов
             tileTapCounts = {};
             
             const container = document.getElementById('tile-container');
@@ -805,17 +829,18 @@
                 initGame(false);
             };
             document.getElementById('undoBtn').onclick = undoMove;
-            document.getElementById('saveBtn').onclick = function() {
-                saveGameToCloud();
-            };
+            document.getElementById('saveBtn').onclick = saveGameToCloud;
             
+            // Клавиатура для ПК
             document.addEventListener('keydown', handleKeyDown, false);
             
+            // Свайпы для мобильных
             const gameContainer = document.getElementById('game-container');
             gameContainer.addEventListener('touchstart', handleTouchStart, {passive: false});
             gameContainer.addEventListener('touchend', handleTouchEnd, {passive: false});
             gameContainer.addEventListener('touchmove', function(e) { e.preventDefault(); }, {passive: false});
             
+            // Предотвращаем скролл страницы
             document.body.addEventListener('touchmove', function(e) {
                 if (e.target.closest('.game-container')) {
                     e.preventDefault();
@@ -835,12 +860,14 @@
         }
 
         function handleKeyDown(e) {
+            // Отмена хода - Backspace или Ctrl+Z
             if (e.key === 'Backspace' || (e.ctrlKey && e.key === 'z')) {
                 e.preventDefault();
                 undoMove();
                 return;
             }
             
+            // Читы для ПК: Ctrl+2, Ctrl+4, Ctrl+8
             if (e.ctrlKey && (e.key === '2' || e.key === '4' || e.key === '8')) {
                 e.preventDefault();
                 removeAllTiles(parseInt(e.key));
@@ -868,6 +895,7 @@
             }
         }
 
+        // Обработка свайпов
         function handleTouchStart(e) {
             if (isProcessing || (gameOver && !canContinue)) return;
             
@@ -888,6 +916,7 @@
             touchStartX = 0;
             touchStartY = 0;
             
+            // Минимальное расстояние для свайпа
             const minSwipeDistance = 30;
             
             if (Math.abs(diffX) > Math.abs(diffY)) {
@@ -909,10 +938,12 @@
             }
         }
 
+        // Обработка тройного тапа для читов на мобильных - строго 3 тапа
         function handleTileTap(tileData, element) {
             const tileId = tileData.id;
             const currentTime = Date.now();
             
+            // Получаем или создаем запись для этой плитки
             if (!tileTapCounts[tileId]) {
                 tileTapCounts[tileId] = {
                     count: 0,
@@ -922,6 +953,7 @@
             
             const tileInfo = tileTapCounts[tileId];
             
+            // Если прошло больше 600мс с последнего тапа - сбрасываем счетчик
             if (currentTime - tileInfo.lastTime > 600) {
                 tileInfo.count = 1;
             } else {
@@ -930,13 +962,17 @@
             
             tileInfo.lastTime = currentTime;
             
+            // Проверяем на 3 тапа
             if (tileInfo.count === 3) {
+                // Тройной тап активирован!
                 removeAllTiles(tileData.value);
                 showCheatIndicator();
+                // Сбрасываем счетчик
                 tileInfo.count = 0;
                 tileInfo.lastTime = 0;
             }
             
+            // Очищаем старые записи (чтобы не засорять память)
             setTimeout(function() {
                 if (tileTapCounts[tileId] && (Date.now() - tileTapCounts[tileId].lastTime > 1000)) {
                     delete tileTapCounts[tileId];
@@ -1006,6 +1042,7 @@
                 tileData.merged = false;
             }
             
+            // Обработка тапов для читов на мобильных (тройной тап)
             tile.addEventListener('click', function(e) {
                 e.stopPropagation();
                 handleTileTap(tileData, tile);
@@ -1075,6 +1112,7 @@
             previousGrid = null;
             canContinue = false;
             
+            // Вибрация для обратной связи
             if (isTelegram && tg.HapticFeedback) {
                 tg.HapticFeedback.impactOccurred('light');
             }
@@ -1299,6 +1337,7 @@
                 }, SPAWN_DELAY);
             }, MOVE_DURATION);
             
+            // Haptic feedback для Telegram
             if (isTelegram && tg.HapticFeedback) {
                 tg.HapticFeedback.impactOccurred('light');
             }
@@ -1427,6 +1466,7 @@
             if (scoreEl) scoreEl.textContent = score;
             if (score > bestScore) {
                 bestScore = score;
+                // Сохраняем лучший счет отдельно для персистентности
                 if (isTelegram && tg.CloudStorage) {
                     tg.CloudStorage.setItem('best_score', bestScore.toString());
                 } else {
@@ -1451,6 +1491,7 @@
             }
             
             if (removed > 0) {
+                // Добавляем новую плитку если удалили 2 или больше
                 setTimeout(function() {
                     if (removed >= 16) {
                         const newTile = addRandomTile(true);
